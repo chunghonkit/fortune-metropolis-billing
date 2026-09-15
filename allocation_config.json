@@ -1,0 +1,362 @@
+{
+  "55861-52267-1": {
+    "account": "55861-52267-1",
+    "meter": "9026183/9048406/",
+    "total_example": 724078.0,
+    "allocations": [
+      {
+        "centre": "AC",
+        "perc": 0.7253839391172826
+      },
+      {
+        "centre": "SW",
+        "perc": 0.2746160608827174
+      }
+    ]
+  },
+  "9076788": {
+    "account": "24096-78457-6",
+    "meter": 9076788.0,
+    "total_example": 75285.00000000001,
+    "allocations": [
+      {
+        "centre": "OC",
+        "perc": 0.5999999999999999
+      },
+      {
+        "centre": "O",
+        "perc": 0.33999999999999997
+      },
+      {
+        "centre": "AO",
+        "perc": 0.009999999999999998
+      },
+      {
+        "centre": "Office/Commercial(14)",
+        "perc": 0.02249996679285382
+      },
+      {
+        "centre": "Commercial/Office/\nSA/Carpark (8)",
+        "perc": 0.013999999999999997
+      },
+      {
+        "centre": "DC",
+        "perc": 0.013500033207146175
+      }
+    ]
+  },
+  "9092771": {
+    "account": "13639-58422-3",
+    "meter": 9092771.0,
+    "total_example": 194415.0,
+    "allocations": [
+      {
+        "centre": "AO",
+        "perc": 0.9199999999999999
+      },
+      {
+        "centre": "OC",
+        "perc": 0.08
+      }
+    ]
+  },
+  "9076646": {
+    "account": "40722-61440-7",
+    "meter": 9076646.0,
+    "total_example": 53708.0,
+    "allocations": [
+      {
+        "centre": "CP",
+        "perc": 0.7439999627615997
+      },
+      {
+        "centre": "OC",
+        "perc": 0.12100003723840023
+      },
+      {
+        "centre": "Commercial Common (2)",
+        "perc": 0.019900014895360096
+      },
+      {
+        "centre": "Commercial/Carpark (4)",
+        "perc": 0.04940008937216057
+      },
+      {
+        "centre": "SA/Commercial/\nCarpark (17)",
+        "perc": 0.011200007447680047
+      },
+      {
+        "centre": "DC",
+        "perc": 0.054499888284799285
+      }
+    ]
+  },
+  "9041918": {
+    "account": "35204-69738-4",
+    "meter": 9041918.0,
+    "total_example": 34635.0,
+    "allocations": [
+      {
+        "centre": "CP",
+        "perc": 0.5299997112747221
+      },
+      {
+        "centre": "Public/Carpark(19)",
+        "perc": 0.022899956691208315
+      },
+      {
+        "centre": "Hotel / L8 Premises(12)",
+        "perc": 0.07100014436263895
+      },
+      {
+        "centre": "SA/Hotel/Carpark(18)",
+        "perc": 0.024299985563736106
+      },
+      {
+        "centre": "SA/Commercial/\nCarpark(17)",
+        "perc": 0.028099898946152738
+      },
+      {
+        "centre": "Hotel / Carpark(9)",
+        "perc": 0.03970001443626389
+      },
+      {
+        "centre": "Commercial/Office/\nHotel(6)",
+        "perc": 0.029499927818680525
+      },
+      {
+        "centre": "Commercial Common(2)",
+        "perc": 0.04250007218131947
+      },
+      {
+        "centre": "Commerical/Carpark/\nHotel(5)",
+        "perc": 0.02960011549011116
+      },
+      {
+        "centre": "DC",
+        "perc": 0.18240017323516675
+      }
+    ]
+  },
+  "1045662": {
+    "account": "97968-02236-6",
+    "meter": 1045662.0,
+    "total_example": 1511.0,
+    "allocations": [
+      {
+        "centre": "DC",
+        "perc": 1.0
+      }
+    ]
+  },
+  "7- 9132448": {
+    "account": "23529-59279-9",
+    "meter": 9132448.0,
+    "total_example": 169084.0,
+    "allocations": [
+      {
+        "centre": "SW",
+        "perc": 1.0
+      }
+    ]
+  },
+  "9091324": {
+    "account": "79292-23337-6",
+    "meter": 9091324.0,
+    "total_example": 38530.0,
+    "allocations": [
+      {
+        "centre": "AO",
+        "perc": 0.9199999999999999
+      },
+      {
+        "centre": "OC",
+        "perc": 0.08
+      }
+    ]
+  },
+  "52167-13569-2": {
+    "account": "52167-13569-2",
+    "meter": " 9144186 /10353005(FiT)/9144880(FiT)",
+    "total_example": 254332.0,
+    "allocations": [
+      {
+        "centre": "AC",
+        "perc": 0.10388151
+      },
+      {
+        "centre": "C",
+        "perc": 0.62705077
+      },
+      {
+        "centre": "DC",
+        "perc": 0.23428442
+      },
+      {
+        "centre": "Hotel/Commercial/SA (11)",
+        "perc": 0.00421152
+      },
+      {
+        "centre": "Hotel/Commercial (10)",
+        "perc": 0.01520757
+      },
+      {
+        "centre": "SA/Commercial (16)",
+        "perc": 0.00731039
+      },
+      {
+        "centre": "Hotel/SA (13)",
+        "perc": 0.00805382
+      }
+    ]
+  },
+  "9086205": {
+    "account": "08731-83914-5",
+    "meter": 9086205.0,
+    "total_example": 14572.0,
+    "allocations": [
+      {
+        "centre": "DC",
+        "perc": 1.0
+      }
+    ]
+  },
+  "9144816": {
+    "account": "00776-78552-1",
+    "meter": "9144816 /10352137 (FiT)",
+    "total_example": 57055.0,
+    "allocations": [
+      {
+        "centre": "Commercial/Office/\nSA (7)",
+        "perc": 0.0852
+      },
+      {
+        "centre": "Hotel/SA (13)",
+        "perc": 0.0515
+      },
+      {
+        "centre": "SA/Commercial (16)",
+        "perc": 0.04660000000000001
+      },
+      {
+        "centre": "Office/Commercial (14)",
+        "perc": 0.0215
+      },
+      {
+        "centre": "Office/Commercial/\nCarpark (15)",
+        "perc": 0.0236
+      },
+      {
+        "centre": "DC",
+        "perc": 0.23159999999999997
+      },
+      {
+        "centre": "C",
+        "perc": 0.1
+      },
+      {
+        "centre": "AC",
+        "perc": 0.385
+      },
+      {
+        "centre": "OC",
+        "perc": 0.020000000000000004
+      },
+      {
+        "centre": "CP",
+        "perc": 0.035
+      }
+    ]
+  },
+  "9144816 (2)": {
+    "account": "00776-78552-1",
+    "meter": "9144816 /10352137 (FiT)",
+    "total_example": 57055.0,
+    "allocations": [
+      {
+        "centre": "Commercial/Office/\nSA (7)",
+        "perc": 0.08520007010779074
+      },
+      {
+        "centre": "Hotel/SA (13)",
+        "perc": 0.05149995618263079
+      },
+      {
+        "centre": "SA/Commercial (16)",
+        "perc": 0.046599947419156955
+      },
+      {
+        "centre": "Office/Commercial (14)",
+        "perc": 0.021499956182630797
+      },
+      {
+        "centre": "Office/Commercial/\nCarpark (15)",
+        "perc": 0.023600035053895366
+      },
+      {
+        "centre": "DC",
+        "perc": 0.23159985978441855
+      },
+      {
+        "centre": "C",
+        "perc": 0.1
+      },
+      {
+        "centre": "AC",
+        "perc": 0.3850000876347384
+      },
+      {
+        "centre": "OC",
+        "perc": 0.019999999999999997
+      },
+      {
+        "centre": "CP",
+        "perc": 0.035000087634738414
+      }
+    ]
+  },
+  "3409264": {
+    "account": "88931-57029-6",
+    "meter": 3409264.0,
+    "total_example": 3571.0,
+    "allocations": [
+      {
+        "centre": "Commercial",
+        "perc": 1.0
+      }
+    ]
+  },
+  "13 - 9076661": {
+    "account": "70873-85471-3",
+    "meter": 9076661.0,
+    "total_example": 129419.0,
+    "allocations": [
+      {
+        "centre": "SA",
+        "perc": 1.0
+      }
+    ]
+  },
+  "9051762": {
+    "account": "72399-00664-9",
+    "meter": 9132488.0,
+    "total_example": 107150.0,
+    "allocations": [
+      {
+        "centre": "SA",
+        "perc": 1.0
+      }
+    ]
+  },
+  "9050465": {
+    "account": "82805-94744-7",
+    "meter": 9132330.0,
+    "total_example": 88494.0,
+    "allocations": [
+      {
+        "centre": "FC",
+        "perc": 1.0
+      }
+    ]
+  }
+}
