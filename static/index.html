@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metropolis Electricity Cost Allocation</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        
+        h1 {
+            color: #1a1a1a;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .policy-notice {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+        
+        .policy-notice strong {
+            color: #856404;
+        }
+        
+        .section {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        
+        .section h2 {
+            font-size: 20px;
+            margin-bottom: 16px;
+            color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .step-number {
+            background: #007bff;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        input[type="file"] {
+            padding: 8px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 14px;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        
+        .summary-card {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .summary-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .summary-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a1a1a;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .validation-item {
+            padding: 8px 12px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .validation-item.ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .validation-item.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 24px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ Metropolis Electricity Cost Allocation</h1>
+            <p class="subtitle">Upload CLP bills + master workbook → allocate costs → download Citybase Excel</p>
+        </header>
+        
+        <div class="policy-notice">
+            <strong>⚠️ CRITICAL POLICY:</strong> Allocation percentages are <strong>recomputed each month from the live master workbook</strong>, NOT frozen July-2026 constants. Upload the current Cost Allocation master for each month.
+        </div>
+        
+        <!-- Step 1: Upload Master Workbook -->
+        <div class="section">
+            <h2><span class="step-number">1</span> Upload Master Workbook</h2>
+            <p style="margin-bottom: 16px; color: #666;">
+                Upload the current Cost Allocation master workbook (AC DEPT + Allocation sheets). 
+                A sample master is pre-loaded for testing.
+            </p>
+            <div class="form-group">
+                <label for="masterFile">Cost Allocation Master (.xlsx or .xls)</label>
+                <input type="file" id="masterFile" accept=".xlsx,.xls,.xlsm">
+            </div>
+            <button onclick="uploadMaster()">Upload Master</button>
+            <button onclick="useDefaultMaster()" class="btn-secondary">Use Default Master</button>
+            <div id="masterStatus"></div>
+        </div>
+        
+        <!-- Step 2: Upload CLP Bills -->
+        <div class="section">
+            <h2><span class="step-number">2</span> Upload CLP Bills</h2>
+            <p style="margin-bottom: 16px; color: #666;">
+                Upload ~15 CLP electricity bill PDFs for the target month.
+            </p>
+            <div class="form-group">
+                <label for="monthInput">Month (e.g., August 2026)</label>
+                <input type="text" id="monthInput" placeholder="August 2026" value="August 2026">
+            </div>
+            <div class="form-group">
+                <label for="billFiles">CLP Bill PDFs (select multiple)</label>
+                <input type="file" id="billFiles" accept=".pdf" multiple>
+            </div>
+            <button onclick="uploadBills()">Parse Bills</button>
+            <div id="billStatus"></div>
+        </div>
+        
+        <!-- Step 3: Allocate -->
+        <div class="section">
+            <h2><span class="step-number">3</span> Allocate Costs</h2>
+            <p style="margin-bottom: 16px; color: #666;">
+                Allocate electricity costs to cost centres using weights from the master workbook.
+            </p>
+            <button onclick="allocate()" class="btn-success">Run Allocation</button>
+            <div id="allocationStatus"></div>
+            <div id="validationResults"></div>
+            <div id="summary"></div>
+        </div>
+        
+        <!-- Step 4: Download -->
+        <div class="section">
+            <h2><span class="step-number">4</span> Download Excel</h2>
+            <p style="margin-bottom: 16px; color: #666;">
+                Download Citybase-format Excel workbook (year rollup + per-account forms).
+            </p>
+            <button onclick="downloadExcel()" id="downloadBtn" disabled>Download Excel Workbook</button>
+            <button onclick="reset()" class="btn-secondary" style="margin-left: 8px;">Reset Session</button>
+        </div>
+        
+        <footer>
+            Metropolis Electricity Cost Allocation v1.0 | Fortune Metropolis | Citybase Property Management
+        </footer>
+    </div>
+    
+    <script>
+        const API_BASE = '';
+        
+        async function useDefaultMaster() {
+            const status = document.getElementById('masterStatus');
+            status.innerHTML = '<div class="status info">Using default sample master workbook...</div>';
+            // No upload needed, backend already has default
+            setTimeout(() => {
+                status.innerHTML = '<div class="status success">✓ Default master loaded (sample from allocation_config.json)</div>';
+            }, 500);
+        }
+        
+        async function uploadMaster() {
+            const fileInput = document.getElementById('masterFile');
+            const status = document.getElementById('masterStatus');
+            
+            if (!fileInput.files.length) {
+                status.innerHTML = '<div class="status error">Please select a master workbook file</div>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            status.innerHTML = '<div class="status info"><span class="loading"></span> Uploading and parsing master workbook...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/upload-master`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    status.innerHTML = `<div class="status success">✓ Master workbook uploaded: ${result.total_accounts} accounts with allocation rules</div>`;
+                } else {
+                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="status error">Error uploading master: ${error.message}</div>`;
+            }
+        }
+        
+        async function uploadBills() {
+            const fileInput = document.getElementById('billFiles');
+            const monthInput = document.getElementById('monthInput');
+            const status = document.getElementById('billStatus');
+            
+            if (!fileInput.files.length) {
+                status.innerHTML = '<div class="status error">Please select PDF bill files</div>';
+                return;
+            }
+            
+            if (!monthInput.value) {
+                status.innerHTML = '<div class="status error">Please enter a month</div>';
+                return;
+            }
+            
+            const formData = new FormData();
+            for (let file of fileInput.files) {
+                formData.append('files', file);
+            }
+            formData.append('month', monthInput.value);
+            
+            status.innerHTML = '<div class="status info"><span class="loading"></span> Parsing bills...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/upload-bills`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let html = `<div class="status success">✓ Parsed ${result.bills_parsed} bills</div>`;
+                    html += '<div class="summary-grid">';
+                    html += `<div class="summary-card"><h3>Bills Parsed</h3><div class="value">${result.bills_parsed}</div></div>`;
+                    html += `<div class="summary-card"><h3>Total KWH</h3><div class="value">${result.total_kwh.toLocaleString()}</div></div>`;
+                    html += `<div class="summary-card"><h3>Total Amount</h3><div class="value">$${result.total_amount.toLocaleString()}</div></div>`;
+                    html += '</div>';
+                    
+                    if (result.errors.length > 0) {
+                        html += '<div class="status warning" style="margin-top: 12px;">Errors: ' + result.errors.join(', ') + '</div>';
+                    }
+                    
+                    status.innerHTML = html;
+                } else {
+                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="status error">Error uploading bills: ${error.message}</div>`;
+            }
+        }
+        
+        async function allocate() {
+            const status = document.getElementById('allocationStatus');
+            const validationDiv = document.getElementById('validationResults');
+            const summaryDiv = document.getElementById('summary');
+            
+            status.innerHTML = '<div class="status info"><span class="loading"></span> Running allocation...</div>';
+            validationDiv.innerHTML = '';
+            summaryDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/allocate`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    status.innerHTML = '<div class="status success">✓ Allocation complete</div>';
+                    
+                    // Validation results
+                    const validation = result.validation;
+                    let validationHtml = '<h3 style="margin-top: 16px; margin-bottom: 8px;">Validation</h3>';
+                    validationHtml += `<div class="validation-item ${validation.residual_ok ? 'ok' : 'error'}">`;
+                    validationHtml += validation.residual_ok ? '✓ Residuals within ±0.01 HKD' : '⚠ Some residuals exceed tolerance';
+                    validationHtml += '</div>';
+                    validationHtml += `<div class="validation-item ok">✓ Allocated ${validation.allocated_bills} / ${validation.total_bills} bills</div>`;
+                    
+                    if (validation.errors.length > 0) {
+                        validationHtml += '<div class="validation-item error">Errors: ' + validation.errors.join(', ') + '</div>';
+                    }
+                    
+                    validationDiv.innerHTML = validationHtml;
+                    
+                    // Summary by cost centre
+                    const summary = result.summary;
+                    let summaryHtml = '<h3 style="margin-top: 16px; margin-bottom: 8px;">Allocation Summary by Cost Centre</h3>';
+                    summaryHtml += '<div class="summary-grid">';
+                    
+                    for (let [centre, data] of Object.entries(summary)) {
+                        summaryHtml += `<div class="summary-card">`;
+                        summaryHtml += `<h3>${centre}</h3>`;
+                        summaryHtml += `<div class="value">$${data.total_amount.toLocaleString()}</div>`;
+                        summaryHtml += `<p style="font-size: 12px; color: #666; margin-top: 4px;">${data.kwh.toLocaleString()} kWh</p>`;
+                        summaryHtml += `</div>`;
+                    }
+                    
+                    summaryHtml += '</div>';
+                    summaryDiv.innerHTML = summaryHtml;
+                    
+                    // Enable download button
+                    document.getElementById('downloadBtn').disabled = false;
+                } else {
+                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="status error">Error running allocation: ${error.message}</div>`;
+            }
+        }
+        
+        async function downloadExcel() {
+            window.location.href = `${API_BASE}/api/download-excel`;
+        }
+        
+        async function reset() {
+            if (!confirm('Reset session? This will clear all uploaded bills and allocation results.')) {
+                return;
+            }
+            
+            try {
+                await fetch(`${API_BASE}/api/reset`, { method: 'POST' });
+                
+                // Clear UI
+                document.getElementById('masterStatus').innerHTML = '';
+                document.getElementById('billStatus').innerHTML = '';
+                document.getElementById('allocationStatus').innerHTML = '';
+                document.getElementById('validationResults').innerHTML = '';
+                document.getElementById('summary').innerHTML = '';
+                document.getElementById('downloadBtn').disabled = true;
+                document.getElementById('billFiles').value = '';
+                
+                alert('Session reset');
+            } catch (error) {
+                alert('Error resetting session: ' + error.message);
+            }
+        }
+        
+        // Load default master on page load
+        window.addEventListener('load', useDefaultMaster);
+    </script>
+</body>
+</html>
