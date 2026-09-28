@@ -153,6 +153,7 @@ Click **Check Gate** to validate:
 - ✅ Meter log form + Excel generation
 - ✅ Session storage (parsed bill summaries)
 - ✅ UI checklist of 15 accounts with status (matched/missing/duplicate/wrong-month/unrecognised)
+- ✅ Modern, dynamic SaaS UI with dark theme toggle
 
 **NOT in Part 1 (TODO for Parts 2-3):**
 - ❌ Cost Allocation master upload
@@ -163,6 +164,38 @@ Click **Check Gate** to validate:
 - ❌ Citybase Cost Sheet / Elect Charge Excel export
 
 **Part 1 does NOT run allocation.** It only validates intake and prepares session for Part 2.
+
+---
+
+## 🎨 Modern UI Design
+
+Part 1 features a redesigned, contemporary SaaS interface:
+
+### Design Highlights
+- **Clean Typography:** Modern font stack with clear hierarchy
+- **Soft Depth:** Subtle shadows and borders for visual separation
+- **Status Chips:** Color-coded badges for account status (matched/missing/duplicate/wrong-month/unrecognised)
+- **Dynamic Updates:** Live checklist updates as files are scanned/parsed
+- **Animated Gate Banner:** Smooth transition from blocked → PASSED state
+- **Progress Indicators:** Pulse animations and spinners during operations
+- **Dark Theme Toggle:** Optional dark mode for comfortable viewing
+- **Responsive Layout:** Desktop-first, usable on laptops (768px+)
+- **Polished States:** Professional empty, loading, error, and success states
+- **Accessible:** High contrast, keyboard navigation, screen reader friendly
+
+### UI Components
+- **Step Rail:** Visual indicator showing Part 1 active, Parts 2-3 locked
+- **Card-based Layout:** Organized sections with clear separation
+- **Tabbed Interface:** Folder scan / Browser upload toggle
+- **Stats Grid:** Quick overview of gate status (matched, missing, duplicates, etc.)
+- **Info Boxes:** Contextual help with folder path, hints
+- **Button Groups:** Organized actions with clear hierarchy
+
+### Tech Stack
+- **Vanilla HTML/CSS/JS** - No heavy frameworks, simple deployment
+- **CSS Custom Properties** - Easy theming with light/dark modes
+- **Smooth Transitions** - 0.2-0.4s animations for polished feel
+- **System Font Stack** - Fast loading, native feel
 
 ---
 

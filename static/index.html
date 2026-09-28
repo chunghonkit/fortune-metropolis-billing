@@ -3,8 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Metropolis Electricity Cost Allocation - Part 1</title>
+    <title>Metropolis Cost Allocation - Part 1</title>
     <style>
+        :root {
+            --color-primary: #2563eb;
+            --color-primary-hover: #1d4ed8;
+            --color-success: #10b981;
+            --color-warning: #f59e0b;
+            --color-error: #ef4444;
+            --color-neutral: #6b7280;
+            
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --bg-elevated: #ffffff;
+            
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            
+            --border-color: #e5e7eb;
+            --border-radius: 12px;
+            --border-radius-lg: 16px;
+            --border-radius-sm: 8px;
+            
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+        }
+        
+        [data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-elevated: #1e293b;
+            
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            
+            --border-color: #334155;
+        }
+        
         * {
             box-sizing: border-box;
             margin: 0;
@@ -12,274 +56,347 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f7fa;
-            color: #333;
+            font-family: var(--font-sans);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
             line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1280px;
             margin: 0 auto;
-            padding: 20px;
-        }
-        
-        header {
-            background: white;
             padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 24px;
         }
         
-        h1 {
-            color: #1a1a1a;
-            font-size: 28px;
-            margin-bottom: 8px;
+        /* Header */
+        .header {
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-color);
+            padding: 20px 0;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-sm);
         }
         
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .step-indicator {
+        .header-content {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 24px;
             display: flex;
-            gap: 16px;
-            background: white;
-            padding: 16px 24px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 24px;
-            font-size: 14px;
+            justify-content: space-between;
+            align-items: center;
         }
         
-        .step-item {
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-weight: 600;
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         
-        .step-item.active {
-            background: #007bff;
-            color: white;
-        }
-        
-        .step-item.inactive {
-            background: #e9ecef;
-            color: #6c757d;
-        }
-        
-        .section {
-            background: white;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 24px;
-        }
-        
-        .section h2 {
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--color-primary), #3b82f6);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 20px;
-            margin-bottom: 16px;
-            color: #1a1a1a;
+            color: white;
+            font-weight: 700;
         }
         
-        .section p {
-            color: #666;
+        .title-group h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+        
+        .title-group p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+        
+        .theme-toggle:hover {
+            background: var(--bg-secondary);
+            transform: translateY(-1px);
+        }
+        
+        /* Step Rail */
+        .step-rail {
+            background: var(--bg-elevated);
+            border-radius: var(--border-radius-lg);
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+        
+        .steps {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+        }
+        
+        .steps::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 40px;
+            right: 40px;
+            height: 2px;
+            background: var(--border-color);
+            z-index: 0;
+        }
+        
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            transition: all 0.3s;
+            background: var(--bg-tertiary);
+            color: var(--text-tertiary);
+            border: 2px solid var(--border-color);
+        }
+        
+        .step.active .step-number {
+            background: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+        }
+        
+        .step.locked .step-number {
+            background: var(--bg-secondary);
+            color: var(--text-tertiary);
+        }
+        
+        .step-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            transition: color 0.3s;
+        }
+        
+        .step.active .step-label {
+            color: var(--color-primary);
+        }
+        
+        .step-sublabel {
+            font-size: 11px;
+            color: var(--text-tertiary);
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-elevated);
+            border-radius: var(--border-radius-lg);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: box-shadow 0.3s;
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-md);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
             margin-bottom: 16px;
         }
         
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .card-icon {
+            font-size: 20px;
+        }
+        
+        .card-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        /* Form Elements */
         .form-group {
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
         
         label {
             display: block;
-            margin-bottom: 8px;
+            font-size: 13px;
             font-weight: 600;
-            color: #555;
+            color: var(--text-primary);
+            margin-bottom: 8px;
         }
         
         input[type="text"],
         input[type="number"],
-        input[type="file"],
-        input[type="date"] {
+        input[type="date"],
+        input[type="file"] {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-sm);
             font-size: 14px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: all 0.2s;
+            font-family: var(--font-sans);
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
         
         input[type="file"] {
-            padding: 8px;
+            padding: 12px;
+            cursor: pointer;
         }
         
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
+        .input-hint {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            margin-top: 6px;
         }
         
+        /* Buttons */
         button {
-            background: #007bff;
-            color: white;
+            padding: 10px 20px;
             border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
+            border-radius: var(--border-radius-sm);
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
-            margin-right: 8px;
-            margin-bottom: 8px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-sans);
         }
         
-        button:hover:not(:disabled) {
-            background: #0056b3;
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
         }
         
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .btn-primary:hover:not(:disabled) {
+            background: var(--color-primary-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
         
         .btn-secondary {
-            background: #6c757d;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
         }
         
         .btn-secondary:hover:not(:disabled) {
-            background: #545b62;
+            background: var(--bg-secondary);
+            transform: translateY(-1px);
         }
         
         .btn-success {
-            background: #28a745;
+            background: var(--color-success);
+            color: white;
         }
         
         .btn-success:hover:not(:disabled) {
-            background: #218838;
+            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
         
         .btn-warning {
-            background: #ffc107;
-            color: #333;
+            background: var(--color-warning);
+            color: white;
         }
         
-        .btn-warning:hover:not(:disabled) {
-            background: #e0a800;
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
-        .status {
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 12px;
-            font-size: 14px;
+        .button-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
         }
         
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-        
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .status.warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-        }
-        
-        .gate-panel {
-            background: #f8f9fa;
-            padding: 16px;
-            border-radius: 8px;
-            margin-top: 16px;
-            border-left: 4px solid #6c757d;
-        }
-        
-        .gate-panel.passed {
-            background: #d4edda;
-            border-left-color: #28a745;
-        }
-        
-        .gate-panel.failed {
-            background: #f8d7da;
-            border-left-color: #dc3545;
-        }
-        
-        .gate-panel h3 {
-            font-size: 16px;
-            margin-bottom: 12px;
-        }
-        
-        .checklist {
-            list-style: none;
-            font-size: 13px;
-        }
-        
-        .checklist li {
-            padding: 6px 8px;
-            margin: 4px 0;
-            border-radius: 4px;
-        }
-        
-        .checklist li.matched {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .checklist li.missing {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .checklist li.duplicate {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .checklist li.wrong-month {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .checklist li.unrecognised {
-            background: #e2e3e5;
-            color: #383d41;
-        }
-        
+        /* Tabs */
         .tabs {
             display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-            border-bottom: 2px solid #e0e0e0;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: var(--bg-tertiary);
+            padding: 4px;
+            border-radius: var(--border-radius-sm);
         }
         
         .tab {
-            padding: 10px 20px;
+            flex: 1;
+            padding: 10px 16px;
             background: transparent;
             border: none;
-            border-bottom: 3px solid transparent;
-            cursor: pointer;
-            font-size: 14px;
+            border-radius: 6px;
+            font-size: 13px;
             font-weight: 600;
-            color: #666;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
         }
         
         .tab.active {
-            color: #007bff;
-            border-bottom-color: #007bff;
+            background: var(--bg-elevated);
+            color: var(--color-primary);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .tab:hover:not(.active) {
+            color: var(--text-primary);
         }
         
         .tab-content {
@@ -288,148 +405,575 @@
         
         .tab-content.active {
             display: block;
+            animation: fadeIn 0.3s;
         }
         
-        .config-info {
-            background: #e7f3ff;
-            padding: 12px;
-            border-radius: 8px;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Status Elements */
+        .status-alert {
+            padding: 12px 16px;
+            border-radius: var(--border-radius-sm);
+            margin-top: 16px;
             font-size: 13px;
+            line-height: 1.5;
+            display: flex;
+            align-items: start;
+            gap: 10px;
+            animation: slideDown 0.3s;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .status-alert.info {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--color-primary);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+        }
+        
+        .status-alert.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--color-success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        
+        .status-alert.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--color-error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        
+        .status-alert.warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--color-warning);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+        
+        /* Info Box */
+        .info-box {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-sm);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .info-box strong {
+            color: var(--text-primary);
+        }
+        
+        .info-box code {
+            background: var(--bg-secondary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--color-primary);
+        }
+        
+        /* Gate Banner */
+        .gate-banner {
+            padding: 20px 24px;
+            border-radius: var(--border-radius-lg);
+            border: 2px solid;
+            margin-bottom: 24px;
+            transition: all 0.4s ease;
+        }
+        
+        .gate-banner.pending {
+            background: var(--bg-tertiary);
+            border-color: var(--border-color);
+        }
+        
+        .gate-banner.failed {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: var(--color-error);
+        }
+        
+        .gate-banner.passed {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: var(--color-success);
+            animation: gatePass 0.6s ease;
+        }
+        
+        @keyframes gatePass {
+            0% { transform: scale(0.98); opacity: 0; }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .gate-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .gate-icon {
+            font-size: 24px;
+        }
+        
+        .gate-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .gate-banner.failed .gate-title {
+            color: var(--color-error);
+        }
+        
+        .gate-banner.passed .gate-title {
+            color: var(--color-success);
+        }
+        
+        .gate-summary {
+            font-size: 14px;
+            color: var(--text-secondary);
             margin-bottom: 16px;
         }
         
-        .config-info code {
-            background: #fff;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
+        .gate-errors {
+            margin-top: 12px;
         }
         
-        footer {
-            text-align: center;
-            padding: 24px;
-            color: #666;
-            font-size: 14px;
+        .gate-errors ul {
+            list-style: none;
+            padding: 0;
         }
         
-        .loading {
+        .gate-errors li {
+            padding: 6px 0;
+            font-size: 13px;
+            color: var(--color-error);
+        }
+        
+        /* Checklist */
+        .checklist-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            background: var(--bg-tertiary);
+            border-radius: var(--border-radius-sm);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        
+        .checklist-item:hover {
+            transform: translateX(2px);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .status-chip {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+        
+        .status-chip.matched {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--color-success);
+        }
+        
+        .status-chip.missing {
+            background: rgba(107, 114, 128, 0.15);
+            color: var(--color-neutral);
+        }
+        
+        .status-chip.duplicate {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--color-warning);
+        }
+        
+        .status-chip.wrong-month {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--color-warning);
+        }
+        
+        .status-chip.unrecognised {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--color-error);
+        }
+        
+        .checklist-account {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        /* Loading Spinner */
+        .spinner {
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 3px solid rgba(0,0,0,.3);
+            border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
-            border-top-color: #007bff;
-            animation: spin 1s ease-in-out infinite;
+            border-top-color: currentColor;
+            animation: spin 0.8s linear infinite;
         }
         
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Progress Bar */
+        .progress-bar {
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 12px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-primary), #3b82f6);
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+        
+        /* Pulse Animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: var(--border-radius-sm);
+            border: 1px solid var(--border-color);
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        /* Form Grid */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            color: var(--text-tertiary);
+            font-size: 13px;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--text-secondary);
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        
+        .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        
+        .empty-description {
+            font-size: 14px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+            
+            .header-content {
+                padding: 0 16px;
+            }
+            
+            .steps::before {
+                display: none;
+            }
+            
+            .step-sublabel {
+                display: none;
+            }
+            
+            .checklist-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .button-group button {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 </head>
 <body>
+    <div class="header">
+        <div class="header-content">
+            <div class="header-title">
+                <div class="logo">M</div>
+                <div class="title-group">
+                    <h1>Metropolis Cost Allocation</h1>
+                    <p>Part 1: Bills + Meter Log Intake</p>
+                </div>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span id="themeIcon">🌙</span>
+            </button>
+        </div>
+    </div>
+    
     <div class="container">
-        <header>
-            <h1>⚡ Metropolis Electricity Cost Allocation</h1>
-            <p class="subtitle">Part 1: Bills + Meter Log Intake & Gate (Local Omarchy Test)</p>
-        </header>
-        
-        <div class="step-indicator">
-            <div class="step-item active">1 Intake</div>
-            <div class="step-item inactive">2 Master (TODO)</div>
-            <div class="step-item inactive">3 Allocate (TODO)</div>
+        <!-- Step Rail -->
+        <div class="step-rail">
+            <div class="steps">
+                <div class="step active">
+                    <div class="step-number">1</div>
+                    <div class="step-label">Intake</div>
+                    <div class="step-sublabel">Bills & Meter Log</div>
+                </div>
+                <div class="step locked">
+                    <div class="step-number">2</div>
+                    <div class="step-label">Master</div>
+                    <div class="step-sublabel">Power Master & Allocation</div>
+                </div>
+                <div class="step locked">
+                    <div class="step-number">3</div>
+                    <div class="step-label">Allocate</div>
+                    <div class="step-sublabel">Cost Sheet Export</div>
+                </div>
+            </div>
         </div>
         
-        <!-- Month Selection -->
-        <div class="section">
-            <h2>📅 Billing Month (Required First)</h2>
-            <p>Set the billing month before scanning folder or uploading bills.</p>
+        <!-- Month Picker -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <span class="card-icon">📅</span>
+                    Billing Month
+                </h2>
+            </div>
+            <p class="card-description">Set the billing month before scanning folder or uploading bills.</p>
             <div class="form-group">
                 <label for="monthInput">Billing Month (YYYY-MM)</label>
-                <input type="text" id="monthInput" placeholder="2025-04" value="">
+                <input type="text" id="monthInput" placeholder="2025-04" />
+                <div class="input-hint">Format: YYYY-MM (e.g., 2025-04 for April 2025)</div>
             </div>
-            <button onclick="setMonth()">Set Month</button>
+            <button class="btn-primary" onclick="setMonth()">
+                <span>Set Month</span>
+            </button>
             <div id="monthStatus"></div>
         </div>
         
         <!-- Bills Intake -->
-        <div class="section">
-            <h2>📄 CLP Bills Intake</h2>
-            <p>Two modes: designated folder (preferred for Omarchy) or browser upload (fallback).</p>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <span class="card-icon">📄</span>
+                    CLP Bills Intake
+                </h2>
+            </div>
+            <p class="card-description">Scan designated folder or upload bills via browser. Expects exactly 15 Metropolis CLP accounts.</p>
             
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('folder')">📁 Folder Scan</button>
                 <button class="tab" onclick="switchTab('upload')">⬆️ Browser Upload</button>
             </div>
             
-            <!-- Folder Scan Mode -->
+            <!-- Folder Scan Tab -->
             <div id="folderTab" class="tab-content active">
-                <div class="config-info" id="folderConfig">
-                    <strong>Folder layout:</strong> <code id="folderPath">Loading...</code>
+                <div class="info-box" id="folderInfo">
+                    <strong>Folder path:</strong> <code id="folderPath">Loading...</code>
                     <br>Place exactly 15 CLP bill PDFs in the <strong>bills/</strong> subfolder.
                 </div>
-                <button onclick="scanFolder()">🔍 Scan Folder</button>
-                <button onclick="refreshFolder()" class="btn-secondary">🔄 Refresh</button>
+                <div class="button-group">
+                    <button class="btn-primary" onclick="scanFolder()">
+                        <span id="scanIcon">🔍</span>
+                        <span>Scan Folder</span>
+                    </button>
+                    <button class="btn-secondary" onclick="refreshFolder()">
+                        <span>🔄</span>
+                        <span>Refresh</span>
+                    </button>
+                </div>
                 <div id="folderStatus"></div>
             </div>
             
-            <!-- Upload Mode -->
+            <!-- Upload Tab -->
             <div id="uploadTab" class="tab-content">
                 <div class="form-group">
                     <label for="billFiles">Select CLP Bill PDFs (multiple)</label>
-                    <input type="file" id="billFiles" accept=".pdf" multiple>
+                    <input type="file" id="billFiles" accept=".pdf" multiple />
+                    <div class="input-hint">Choose up to 15 PDF files</div>
                 </div>
-                <button onclick="uploadBills()">⬆️ Upload & Parse Bills</button>
+                <button class="btn-primary" onclick="uploadBills()">
+                    <span>⬆️</span>
+                    <span>Upload & Parse Bills</span>
+                </button>
                 <div id="uploadStatus"></div>
             </div>
         </div>
         
         <!-- Gate Status -->
-        <div class="section">
-            <h2>🚦 Gate Status (15 Expected Accounts)</h2>
-            <p>Continue to Part 2 only when gate PASSES: all 15 accounts matched, same month, meter log complete.</p>
-            <button onclick="checkGate()">Check Gate</button>
-            <div id="gateStatus"></div>
+        <div id="gateContainer"></div>
+        
+        <!-- Account Checklist -->
+        <div class="card" id="checklistCard" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <span class="card-icon">✓</span>
+                    Account Checklist
+                </h2>
+            </div>
+            <p class="card-description">Live status of 15 expected Metropolis CLP accounts.</p>
+            <div id="checklistStats"></div>
+            <div id="checklistGrid" class="checklist-grid"></div>
         </div>
         
         <!-- Meter Log -->
-        <div class="section">
-            <h2>📊 Meter Log (Check-Meter 6681757 - 散熱水泵電)</h2>
-            <p>Required for Part 2. Drives account 55861-52267-1 AC/SW allocation.</p>
-            <div class="form-row">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <span class="card-icon">📊</span>
+                    Meter Log
+                </h2>
+            </div>
+            <p class="card-description">Check-meter <strong>6681757</strong> (散熱水泵電 / Sea Water Pump). Drives account 55861-52267-1 AC/SW allocation.</p>
+            <div class="form-grid">
                 <div class="form-group">
                     <label for="meterPrevious">Previous Reading</label>
-                    <input type="number" id="meterPrevious" placeholder="e.g., 1234567">
+                    <input type="number" id="meterPrevious" placeholder="e.g., 1234567" />
                 </div>
                 <div class="form-group">
                     <label for="meterPresent">Present Reading</label>
-                    <input type="number" id="meterPresent" placeholder="e.g., 1235890">
+                    <input type="number" id="meterPresent" placeholder="e.g., 1235890" />
+                </div>
+                <div class="form-group">
+                    <label for="meterDate">Read Date (optional)</label>
+                    <input type="date" id="meterDate" />
                 </div>
             </div>
-            <div class="form-group">
-                <label for="meterDate">Read Date (optional)</label>
-                <input type="date" id="meterDate">
+            <div class="button-group">
+                <button class="btn-success" onclick="saveMeterLog()">
+                    <span>💾</span>
+                    <span>Save Meter Log</span>
+                </button>
+                <button class="btn-secondary" onclick="downloadMeterLog()">
+                    <span>📥</span>
+                    <span>Download Excel</span>
+                </button>
             </div>
-            <button onclick="saveMeterLog()" class="btn-success">💾 Save Meter Log</button>
-            <button onclick="downloadMeterLog()" class="btn-secondary">📥 Download meter_log_YYYY-MM.xlsx</button>
             <div id="meterStatus"></div>
         </div>
         
         <!-- Actions -->
-        <div class="section">
-            <h2>🎯 Actions</h2>
-            <button id="continueBtn" onclick="continueToPart2()" class="btn-success" disabled>▶️ Continue to Part 2 (TODO)</button>
-            <button onclick="reset()" class="btn-warning">🔄 Clear Session</button>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <span class="card-icon">🎯</span>
+                    Actions
+                </h2>
+            </div>
+            <div class="button-group">
+                <button id="continueBtn" class="btn-success" onclick="continueToPart2()" disabled>
+                    <span>▶️</span>
+                    <span>Continue to Part 2</span>
+                </button>
+                <button class="btn-warning" onclick="reset()">
+                    <span>🔄</span>
+                    <span>Clear Session</span>
+                </button>
+            </div>
         </div>
         
-        <footer>
+        <div class="footer">
             Metropolis Electricity Cost Allocation v1.0.0-part1 | Fortune Metropolis | Local Omarchy Test
-        </footer>
+        </div>
     </div>
     
     <script>
         const API_BASE = '';
         let currentTab = 'folder';
+        
+        // Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            document.getElementById('themeIcon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            localStorage.setItem('theme', newTheme);
+        }
+        
+        // Load saved theme
+        window.addEventListener('load', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('themeIcon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            loadConfig();
+        });
         
         // Tab switching
         function switchTab(tab) {
@@ -438,15 +982,15 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             
             if (tab === 'folder') {
-                document.querySelector('.tab:nth-child(1)').classList.add('active');
+                document.querySelectorAll('.tab')[0].classList.add('active');
                 document.getElementById('folderTab').classList.add('active');
             } else {
-                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.querySelectorAll('.tab')[1].classList.add('active');
                 document.getElementById('uploadTab').classList.add('active');
             }
         }
         
-        // Load config on page load
+        // Load config
         async function loadConfig() {
             try {
                 const response = await fetch(`${API_BASE}/api/config`);
@@ -456,7 +1000,6 @@
                 const today = new Date();
                 monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
                 
-                // Update folder path display
                 const folderPath = `${config.metropolis_root}/${monthInput.value}/bills/`;
                 document.getElementById('folderPath').textContent = folderPath;
             } catch (error) {
@@ -470,11 +1013,11 @@
             const status = document.getElementById('monthStatus');
             
             if (!monthInput.value) {
-                status.innerHTML = '<div class="status error">Please enter a billing month</div>';
+                status.innerHTML = '<div class="status-alert error">Please enter a billing month</div>';
                 return;
             }
             
-            status.innerHTML = '<div class="status info"><span class="loading"></span> Setting month...</div>';
+            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Setting month...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/set-month`, {
@@ -486,24 +1029,26 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    status.innerHTML = `<div class="status success">✓ Billing month set to ${result.month}</div>`;
+                    status.innerHTML = `<div class="status-alert success">✓ Billing month set to ${result.month}</div>`;
                     
-                    // Update folder path
                     const config = await (await fetch(`${API_BASE}/api/config`)).json();
                     const folderPath = `${config.metropolis_root}/${monthInput.value}/bills/`;
                     document.getElementById('folderPath').textContent = folderPath;
                 } else {
-                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
                 }
             } catch (error) {
-                status.innerHTML = `<div class="status error">Error: ${error.message}</div>`;
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
             }
         }
         
         // Scan folder
         async function scanFolder() {
             const status = document.getElementById('folderStatus');
-            status.innerHTML = '<div class="status info"><span class="loading"></span> Scanning folder...</div>';
+            const scanIcon = document.getElementById('scanIcon');
+            
+            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Scanning folder...</div>';
+            scanIcon.textContent = '⏳';
             
             try {
                 const response = await fetch(`${API_BASE}/api/scan-folder`, {
@@ -513,23 +1058,26 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    let html = `<div class="status success">✓ Scanned ${result.folder_path}</div>`;
-                    html += `<div class="status info">Found ${result.pdfs_found} PDFs, parsed ${result.bills_parsed} bills</div>`;
+                    let html = `<div class="status-alert success">✓ Scanned ${result.folder_path}</div>`;
+                    html += `<div class="status-alert info">Found ${result.pdfs_found} PDFs, parsed ${result.bills_parsed} bills</div>`;
                     
                     if (result.errors.length > 0) {
-                        html += '<div class="status warning">Errors: ' + result.errors.join(', ') + '</div>';
+                        html += '<div class="status-alert warning">⚠ Errors: ' + result.errors.slice(0, 3).join(', ') + (result.errors.length > 3 ? '...' : '') + '</div>';
                     }
                     
                     status.innerHTML = html;
-                    
-                    // Update gate
                     displayGate(result.gate_status);
+                    scanIcon.textContent = '✓';
+                    setTimeout(() => scanIcon.textContent = '🔍', 2000);
                 } else {
-                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
+                    scanIcon.textContent = '❌';
+                    setTimeout(() => scanIcon.textContent = '🔍', 2000);
                 }
             } catch (error) {
-                const errMsg = error.message || 'Unknown error';
-                status.innerHTML = `<div class="status error">Error: ${errMsg}</div>`;
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+                scanIcon.textContent = '❌';
+                setTimeout(() => scanIcon.textContent = '🔍', 2000);
             }
         }
         
@@ -544,7 +1092,7 @@
             const status = document.getElementById('uploadStatus');
             
             if (!fileInput.files.length) {
-                status.innerHTML = '<div class="status error">Please select PDF files</div>';
+                status.innerHTML = '<div class="status-alert error">Please select PDF files</div>';
                 return;
             }
             
@@ -553,7 +1101,7 @@
                 formData.append('files', file);
             }
             
-            status.innerHTML = '<div class="status info"><span class="loading"></span> Uploading and parsing bills...</div>';
+            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Uploading and parsing bills...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/upload-bills`, {
@@ -564,106 +1112,101 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    let html = `<div class="status success">✓ Parsed ${result.bills_parsed} bills</div>`;
+                    let html = `<div class="status-alert success">✓ Parsed ${result.bills_parsed} bills</div>`;
                     
                     if (result.errors.length > 0) {
-                        html += '<div class="status warning">Errors: ' + result.errors.join(', ') + '</div>';
+                        html += '<div class="status-alert warning">⚠ Errors: ' + result.errors.slice(0, 3).join(', ') + (result.errors.length > 3 ? '...' : '') + '</div>';
                     }
                     
                     status.innerHTML = html;
-                    
-                    // Update gate
                     displayGate(result.gate_status);
                 } else {
-                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
                 }
             } catch (error) {
-                status.innerHTML = `<div class="status error">Error: ${error.message}</div>`;
-            }
-        }
-        
-        // Check gate
-        async function checkGate() {
-            const status = document.getElementById('gateStatus');
-            status.innerHTML = '<div class="status info"><span class="loading"></span> Checking gate...</div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/status`);
-                const result = await response.json();
-                
-                displayGate(result.gate_status);
-            } catch (error) {
-                status.innerHTML = `<div class="status error">Error: ${error.message}</div>`;
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
             }
         }
         
         // Display gate status
         function displayGate(gate) {
-            const status = document.getElementById('gateStatus');
+            const container = document.getElementById('gateContainer');
+            const checklistCard = document.getElementById('checklistCard');
             const continueBtn = document.getElementById('continueBtn');
             
             if (!gate) {
-                status.innerHTML = '<div class="status info">No gate status yet. Parse bills and set meter log first.</div>';
-                continueBtn.disabled = true;
+                container.innerHTML = '';
                 return;
             }
             
-            const gateClass = gate.passed ? 'passed' : 'failed';
-            let html = `<div class="gate-panel ${gateClass}">`;
-            html += `<h3>${gate.passed ? '✓ GATE PASSED' : '⚠ GATE FAILED'}</h3>`;
+            const gateClass = gate.passed ? 'passed' : (gate.errors.length > 0 ? 'failed' : 'pending');
+            let html = `<div class="gate-banner ${gateClass}">`;
             
-            // Summary
-            html += `<p><strong>Summary:</strong> ${gate.summary.matched}/${gate.summary.expected} accounts matched`;
-            if (gate.summary.missing > 0) html += `, ${gate.summary.missing} missing`;
-            if (gate.summary.duplicates > 0) html += `, ${gate.summary.duplicates} duplicates`;
-            if (gate.summary.wrong_month > 0) html += `, ${gate.summary.wrong_month} wrong month`;
-            if (gate.summary.unrecognised > 0) html += `, ${gate.summary.unrecognised} unrecognised`;
-            html += `</p>`;
-            
-            // Errors
-            if (gate.errors.length > 0) {
-                html += '<p><strong>Errors:</strong></p><ul>';
-                gate.errors.forEach(err => {
-                    html += `<li>${err}</li>`;
-                });
-                html += '</ul>';
-            }
-            
-            // Warnings
-            if (gate.warnings.length > 0) {
-                html += '<p><strong>Warnings:</strong></p><ul>';
-                gate.warnings.forEach(warn => {
-                    html += `<li>${warn}</li>`;
-                });
-                html += '</ul>';
-            }
-            
-            // Account checklist
-            html += '<p><strong>15 Expected Accounts:</strong></p>';
-            html += '<ul class="checklist">';
-            for (const [account, info] of Object.entries(gate.account_checklist)) {
-                const statusLabel = {
-                    'matched': '✓ Matched',
-                    'missing': '✗ Missing',
-                    'duplicate': '⚠ Duplicate',
-                    'wrong_month': '⚠ Wrong Month',
-                    'unrecognised': '? Unrecognised'
-                }[info.status];
+            if (gate.passed) {
+                html += '<div class="gate-header"><span class="gate-icon">✓</span><h3 class="gate-title">Gate PASSED</h3></div>';
+                html += '<div class="gate-summary">All conditions met. Ready to continue to Part 2.</div>';
+            } else {
+                html += '<div class="gate-header"><span class="gate-icon">⚠</span><h3 class="gate-title">Gate Validation</h3></div>';
+                html += `<div class="gate-summary">${gate.summary.matched}/${gate.summary.expected} accounts matched`;
+                if (gate.summary.missing > 0) html += `, ${gate.summary.missing} missing`;
+                if (gate.summary.duplicates > 0) html += `, ${gate.summary.duplicates} duplicates`;
+                if (gate.summary.wrong_month > 0) html += `, ${gate.summary.wrong_month} wrong month`;
+                if (gate.summary.unrecognised > 0) html += `, ${gate.summary.unrecognised} unrecognised`;
+                html += '</div>';
                 
-                let extra = '';
-                if (info.status === 'wrong_month' && info.bill_month) {
-                    extra = ` (bill: ${info.bill_month})`;
+                if (gate.errors.length > 0) {
+                    html += '<div class="gate-errors"><ul>';
+                    gate.errors.forEach(err => {
+                        html += `<li>• ${err}</li>`;
+                    });
+                    html += '</ul></div>';
                 }
-                
-                html += `<li class="${info.status}">${account} - ${statusLabel}${extra}</li>`;
             }
-            html += '</ul>';
             
             html += '</div>';
-            status.innerHTML = html;
+            container.innerHTML = html;
             
-            // Enable/disable continue button
+            // Show checklist if we have account data
+            if (gate.account_checklist && Object.keys(gate.account_checklist).length > 0) {
+                checklistCard.style.display = 'block';
+                displayChecklist(gate.account_checklist, gate.summary);
+            }
+            
             continueBtn.disabled = !gate.passed;
+        }
+        
+        // Display checklist
+        function displayChecklist(checklist, summary) {
+            const statsDiv = document.getElementById('checklistStats');
+            const gridDiv = document.getElementById('checklistGrid');
+            
+            // Stats
+            let statsHtml = '<div class="stats-grid">';
+            statsHtml += `<div class="stat-card"><div class="stat-label">Matched</div><div class="stat-value">${summary.matched}</div></div>`;
+            statsHtml += `<div class="stat-card"><div class="stat-label">Missing</div><div class="stat-value">${summary.missing}</div></div>`;
+            statsHtml += `<div class="stat-card"><div class="stat-label">Duplicates</div><div class="stat-value">${summary.duplicates}</div></div>`;
+            statsHtml += `<div class="stat-card"><div class="stat-label">Wrong Month</div><div class="stat-value">${summary.wrong_month}</div></div>`;
+            statsHtml += `<div class="stat-card"><div class="stat-label">Unrecognised</div><div class="stat-value">${summary.unrecognised}</div></div>`;
+            statsHtml += '</div>';
+            statsDiv.innerHTML = statsHtml;
+            
+            // Grid
+            let gridHtml = '';
+            for (const [account, info] of Object.entries(checklist)) {
+                const statusLabel = {
+                    'matched': 'Matched',
+                    'missing': 'Missing',
+                    'duplicate': 'Duplicate',
+                    'wrong_month': 'Wrong Month',
+                    'unrecognised': 'Unrecognised'
+                }[info.status];
+                
+                gridHtml += `<div class="checklist-item">
+                    <span class="status-chip ${info.status}">${statusLabel}</span>
+                    <span class="checklist-account">${account}</span>
+                </div>`;
+            }
+            gridDiv.innerHTML = gridHtml;
         }
         
         // Save meter log
@@ -674,7 +1217,7 @@
             const status = document.getElementById('meterStatus');
             
             if (!previous || !present) {
-                status.innerHTML = '<div class="status error">Please enter both previous and present readings</div>';
+                status.innerHTML = '<div class="status-alert error">Please enter both previous and present readings</div>';
                 return;
             }
             
@@ -683,7 +1226,7 @@
             formData.append('present', present);
             if (readDate) formData.append('read_date', readDate);
             
-            status.innerHTML = '<div class="status info"><span class="loading"></span> Saving meter log...</div>';
+            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Saving meter log...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/meter-log`, {
@@ -695,21 +1238,20 @@
                 
                 if (result.success) {
                     const delta = result.delta || 0;
-                    status.innerHTML = `<div class="status success">✓ Meter log saved: Δ = ${delta.toLocaleString()} kWh</div>`;
+                    status.innerHTML = `<div class="status-alert success">✓ Meter log saved: Δ = ${delta.toLocaleString()} kWh</div>`;
                     
-                    // Update gate
                     if (result.gate_status) {
                         displayGate(result.gate_status);
                     }
                 } else {
-                    status.innerHTML = `<div class="status error">Error: ${result.message || 'Unknown error'}</div>`;
+                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
                 }
             } catch (error) {
-                status.innerHTML = `<div class="status error">Error: ${error.message}</div>`;
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
             }
         }
         
-        // Download meter log Excel
+        // Download meter log
         async function downloadMeterLog() {
             window.location.href = `${API_BASE}/api/download-meter-log`;
         }
@@ -728,12 +1270,12 @@
             try {
                 await fetch(`${API_BASE}/api/reset`, { method: 'POST' });
                 
-                // Clear UI
                 document.getElementById('monthStatus').innerHTML = '';
                 document.getElementById('folderStatus').innerHTML = '';
                 document.getElementById('uploadStatus').innerHTML = '';
-                document.getElementById('gateStatus').innerHTML = '';
+                document.getElementById('gateContainer').innerHTML = '';
                 document.getElementById('meterStatus').innerHTML = '';
+                document.getElementById('checklistCard').style.display = 'none';
                 document.getElementById('meterPrevious').value = '';
                 document.getElementById('meterPresent').value = '';
                 document.getElementById('meterDate').value = '';
@@ -745,9 +1287,6 @@
                 alert('Error resetting session: ' + error.message);
             }
         }
-        
-        // Load config on page load
-        window.addEventListener('load', loadConfig);
     </script>
 </body>
 </html>
