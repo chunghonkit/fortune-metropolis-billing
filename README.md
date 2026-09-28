@@ -1,48 +1,34 @@
 # Metropolis Electricity Cost Allocation App
 
-**FastAPI web application for allocating CLP electricity bills to cost centres using live monthly master workbook weights.**
+**FastAPI web application for allocating CLP electricity bills to cost centres - Part 1 Intake & Gate**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/chunghonkit/fortune-metropolis-billing)
+[![Version](https://img.shields.io/badge/version-1.0.0--part1-blue.svg)](https://github.com/chunghonkit/fortune-metropolis-billing)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104-green.svg)](https://fastapi.tiangolo.com/)
 
-## 🎯 Product Goal
+## 🎯 Product Flow (SPEC v1.4)
 
-Upload ~15 CLP electricity bill PDFs for one month → parse → allocate to cost centres using Kit-approved fixed-% rules → download an Excel workbook matching the Citybase cost sheet (year rollup column + per-account ELECTRICITY COST ALLOCATION forms).
+Three-step web app for Metropolis electricity cost allocation:
 
-**First live target month:** August 2026  
-**Dry-run month:** July 2026 (fixtures validated)
+| Part | Status | Description |
+|------|--------|-------------|
+| **Part 1** | ✅ **SHIPPED** | Bills + Meter Log First → Gate validation (15 accounts + meter log) |
+| Part 2 | 📋 TODO | Master workbook → Power master (BI) + detail allocation (audit) |
+| Part 3 | 📋 TODO | In-place update Citybase Excel templates (Cost Sheet + Elect Charge) |
 
----
-
-## ⚠️ CRITICAL POLICY CHANGE
-
-### Allocation % Must Be Recomputed Each Month from Live Master Workbook
-
-**NOT frozen July-2026 constants.**
-
-#### Runtime Source of Truth
-- **Live master workbook** (Cost Allocation master.xlsx/xls)
-- **AC DEPT sheet, Column C** → `weight / Σ(weights)` per account
-- Recompute every month from the current master supplied by Kit
-
-#### Frozen JSON/MD Files
-- `metropolis_allocation_rules.json`
-- `allocation_config.json`
-- `uploads/METROPOLIS_ALLOCATION_RULES.md`
-
-**These are FIXTURES/TESTS ONLY**, not runtime source of truth.
+**Current implementation:** Part 1 only  
+**Test target:** Kit's Omarchy notebook (local `uvicorn` on `localhost:8000`)
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Local Omarchy Test)
 
 ### Prerequisites
 
 - Python 3.8+
 - pip
 
-### Installation
+### Installation & Run
 
 ```bash
 # Clone the repository
@@ -52,50 +38,131 @@ cd fortune-metropolis-billing
 # Install dependencies
 pip3 install -r requirements.txt
 
-# Run the app
-export PATH="/home/ubuntu/.local/bin:$PATH"  # If needed
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Run the app (localhost only for Omarchy)
+python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ### Access the App
 
-Open browser to: **http://localhost:8000**
+Open browser to: **http://127.0.0.1:8000**
+
+### Folder Layout for Part 1 (Designated Folder Mode)
+
+Default root: `~/Metropolis` (configurable via `METROPOLIS_ROOT` env var)
+
+```
+~/Metropolis/
+  2025-04/                    # Billing month (YYYY-MM)
+    bills/                    # Place exactly 15 CLP bill PDFs here
+    meter_log/                # Optional: meter log photo / Excel
+    masters/                  # Optional: Cost Allocation master (Part 2)
+    out/                      # App writes: meter_log_YYYY-MM.xlsx, etc.
+  2025-05/
+    bills/
+    ...
+```
+
+**Example workflow:**
+
+1. Create folder: `mkdir -p ~/Metropolis/2025-04/bills`
+2. Place 15 CLP bill PDFs in `~/Metropolis/2025-04/bills/`
+3. Open app at http://127.0.0.1:8000
+4. Set month to `2025-04`
+5. Click **Scan Folder**
+6. Fill meter log (check-meter 6681757: previous/present readings)
+7. Check gate status → Continue when PASSED
 
 ---
 
-## 📖 Usage
+## 📖 Part 1 Usage
 
-### Step 1: Upload Master Workbook
+### Step 1: Set Billing Month
 
-Upload the **current Cost Allocation master workbook** for the target month.
+Enter billing month in `YYYY-MM` format (e.g., `2025-04`). **Required before scan/upload.**
 
-**Required sheets:**
-- `AC DEPT` (runtime source of truth for weights)
-- `Allocation` (fallback/supplementary)
+### Step 2: CLP Bills Intake (Two Modes)
 
-**Default master:** A sample master is pre-loaded at `data/masters/cost_allocation_master.xlsx` (generated from July 2026 allocation_config.json for testing).
+#### Mode A: Folder Scan (Preferred for Omarchy)
 
-**⚠️ For production:** Upload the current master each month. Weights are recomputed live from AC DEPT column C.
+- Place 15 CLP bill PDFs in `~/Metropolis/{YYYY-MM}/bills/`
+- Click **Scan Folder** in the app
+- App automatically parses all PDFs found
 
-### Step 2: Upload CLP Bills
+#### Mode B: Browser Upload (Fallback)
 
-Upload ~15 CLP electricity bill PDFs for the target month.
+- Click **Browser Upload** tab
+- Select multiple PDF files
+- Click **Upload & Parse Bills**
 
-**Format:** Standard CLP bills (PDF)  
-**Month:** Enter month label (e.g., "August 2026")
+### Step 3: Meter Log
 
-### Step 3: Run Allocation
+Fill meter log for check-meter **6681757** (散熱水泵電):
 
-Click **"Run Allocation"** to:
-1. Compute weights from master workbook (live, not frozen)
-2. Allocate electricity costs to cost centres
-3. Validate residuals within ±0.01 HKD tolerance
+- **Previous reading:** Integer (e.g., 1234567)
+- **Present reading:** Integer, must be ≥ previous (e.g., 1235890)
+- **Read date:** Optional (YYYY-MM-DD)
 
-### Step 4: Download Excel
+Click **Save Meter Log**.
 
-Download Citybase-format Excel workbook containing:
-- **Year Rollup Sheet:** 27 cost centres in FC→SA row order
-- **Per-Account Forms:** ELECTRICITY COST ALLOCATION forms for each account
+Download generated `meter_log_YYYY-MM.xlsx` (CheckMeter + Session sheets).
+
+### Step 4: Gate Validation
+
+Click **Check Gate** to validate:
+
+✅ **GATE PASS conditions:**
+- Exactly 15 expected Metropolis accounts present
+- All bills from the same billing month
+- No duplicates
+- No unrecognised accounts
+- Meter log complete (present ≥ previous)
+
+❌ **GATE FAIL:** Continue button disabled until all conditions met.
+
+### Expected 15 Accounts (Metropolis)
+
+| # | Account | Typical Role |
+|---|---------|--------------|
+| 1 | 55861-52267-1 | Retail chillers → AC/SW (live) |
+| 2 | 24096-78457-6 | Multi-centre (office power etc.) |
+| 3 | 13639-58422-3 | Office chiller → AO 92 / OC 8 |
+| 4 | 40722-61440-7 | Multi-centre (carpark-heavy) |
+| 5 | 35204-69738-4 | Multi-centre (carpark / shared) |
+| 6 | 97968-02236-6 | DC 100% |
+| 7 | 23529-59279-9 | SW 100% |
+| 8 | 79292-23337-6 | Office chiller → AO 92 / OC 8 |
+| 9 | 52167-13569-2 | FiT (retail) — gross base |
+| 10 | 08731-83914-5 | DC 100% |
+| 11 | 00776-78552-1 | FiT — gross base |
+| 12 | 88931-57029-6 | C 100% |
+| 13 | 70873-85471-3 | SA 100% |
+| 14 | 72399-00664-9 | SA 100% |
+| 15 | 82805-94744-7 | **Food Court** → FC 100% |
+
+**Note:** FC = Food Court (not "Fitness Centre").
+
+---
+
+## ⚠️ Part 1 Scope
+
+**Implemented in Part 1:**
+- ✅ Billing month picker (YYYY-MM) required first
+- ✅ Designated folder scan (preferred for Omarchy)
+- ✅ Browser upload fallback
+- ✅ Hard gate: 15 accounts, same month, no duplicates, meter log complete
+- ✅ Meter log form + Excel generation
+- ✅ Session storage (parsed bill summaries)
+- ✅ UI checklist of 15 accounts with status (matched/missing/duplicate/wrong-month/unrecognised)
+
+**NOT in Part 1 (TODO for Parts 2-3):**
+- ❌ Cost Allocation master upload
+- ❌ Live % recomputation from AC DEPT
+- ❌ Allocation engine (FiT gross base, office chillers 92/8, etc.)
+- ❌ Power master (BI) export
+- ❌ Detail cost allocation (audit) export
+- ❌ Citybase Cost Sheet / Elect Charge Excel export
+
+**Part 1 does NOT run allocation.** It only validates intake and prepares session for Part 2.
 
 ---
 
@@ -211,73 +278,38 @@ Centre C vs DC for FiT account/meter 9144816
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing (Part 1)
 
 ### Run Unit Tests
 
 ```bash
-# Run all tests
-python3 -m pytest tests/ -v
-
-# Run allocation tests only
-python3 -m pytest tests/test_allocation.py -v
+# Run Part 1 tests
+python3 -m pytest tests/test_part1.py -v
 
 # Run with coverage
 python3 -m pytest tests/ --cov=app --cov-report=html
 ```
 
-### Test Data
+### Test Cases for Part 1
 
-- **July 2026 fixture bills:** Validated ground truth (1,332,208 kWh total)
-- **allocation_config.json:** July 2026 snapshot for test fixtures
-- **Sample master:** `data/masters/cost_allocation_master.xlsx` (generated from allocation_config.json)
+- ✅ Gate PASS with 15 mocked accounts
+- ✅ Gate FAIL on missing account
+- ✅ Gate FAIL on duplicate account
+- ✅ Gate FAIL on wrong month
+- ✅ Gate FAIL on invalid meter log (present < previous)
+- ✅ Folder scan finds PDFs under temp METROPOLIS_ROOT
+- ✅ Meter log completeness validation
 
-**⚠️ Tests use frozen July 2026 data.** Production uses live master workbook.
-
----
-
-## 📋 Master Workbook Format
-
-### AC DEPT Sheet (Runtime Source of Truth)
-
-| Column | Content | Example |
-|--------|---------|---------|
-| A or B | Account/Meter ID | 55861-52267-1 |
-| B or C | Cost Centre | AC |
-| **C** | **Weight** (source of truth) | **525.48** |
-
-**Percentage Calculation:**
-
-```
-AC%  = 525.48 / (525.48 + 198.99) = 72.54%
-SW%  = 198.99 / (525.48 + 198.99) = 27.46%
-```
-
-### Allocation Sheet (Fallback)
-
-Pre-computed percentages (used if account not in AC DEPT).
-
-### Cost Allocat Sheet
-
-May contain `#REF!` errors (2×) – these are non-blocking and safely ignored per `config.json`.
+**Test data:** Use fixtures or mocks for 15 expected accounts. Golden PDFs not required in repo for Part 1.
 
 ---
 
-## 🐛 Known Issues & Open Questions
+## 🐛 Known Issues (Part 1)
 
-### Open Questions (Config-Gated)
+- **FC label:** FC = **Food Court**, not "Fitness Centre" (documented in SPEC §2.4)
+- **Month format:** Only `YYYY-MM` supported (e.g., `2025-04`); no `MM-YYYY` or `April 2025`
 
-| # | Question | Status | Config Flag |
-|---|----------|--------|-------------|
-| Q1 | Meter ID mapping (9092771/9091324 vs 7662756/7662761) | Pending Kit | `meter_id_mapping.apply_mapping` |
-| Q2 | FiT account 9144816: centre C vs DC | Pending Kit | `fit_account_9144816_centre.current_value` |
-
-**Default behavior:** Q1 mapping OFF, Q2 centre = C (until Kit confirms).
-
-### Non-Blocking Issues
-
-- **Cost Allocat #REF! (2×):** Ignored per config (`ignore_ref_errors: true`)
-- **Missing PDFs:** If < 15 bills, validation warns but continues
+**Parts 2-3 not implemented yet** — no allocation, no Citybase Excel export in Part 1.
 
 ---
 
@@ -289,81 +321,91 @@ See [`requirements.txt`](requirements.txt) for full list.
 - **FastAPI 0.104:** Web framework
 - **uvicorn:** ASGI server
 - **PyMuPDF (fitz):** PDF parsing
-- **openpyxl:** Excel reading/writing
-- **pandas:** Data processing
+- **openpyxl:** Excel reading/writing (meter log generation)
 
 ---
 
-## 🗂️ File Structure
+## 🗂️ File Structure (Part 1)
 
 ```
 .
 ├── app/                          # Application code
-│   ├── main.py                   # FastAPI app
-│   ├── clp_parser.py             # CLP bill parser
-│   ├── master_parser.py          # Master workbook parser (AC DEPT column C)
-│   ├── allocation_engine.py      # Allocation engine (live weights)
-│   └── excel_exporter.py         # Citybase Excel exporter
+│   ├── main.py                   # FastAPI app (Part 1 intake & gate)
+│   ├── clp_parser.py             # CLP bill PDF parser
+│   └── __init__.py
 ├── static/                       # Static web UI
-│   └── index.html                # Web interface
-├── data/                         # Data files
-│   └── masters/                  # Sample/uploaded master workbooks
+│   └── index.html                # Part 1 UI (bills + meter log first)
 ├── tests/                        # Unit tests
-│   └── test_allocation.py        # Allocation tests (July 2026 fixtures)
-├── fixtures/                     # Test fixtures (planned)
-├── config.json                   # Runtime configuration
+│   └── test_part1.py             # Part 1 gate & folder scan tests (TODO)
 ├── requirements.txt              # Python dependencies
 ├── README.md                     # This file
-├── allocation_config.json        # July 2026 fixture (TEST ONLY)
 ├── clp_parser_v2_final.py        # Original CLP parser (copied to app/)
-├── ELECTRICITY_PARSING_RULES.md  # CLP parsing rules documentation
-└── index.html / Index.html       # Legacy client-side demo (replaced)
+└── SPEC.md / uploads/SPEC.md     # Product spec v1.4 (3-part flow)
 ```
 
----
-
-## 📝 Validation Report
-
-See `uploads/MASTER_VALIDATION.md` for full validation details.
-
-**Summary:**
-- ✅ Citybase cache: 0 mismatches
-- ✅ Allocation!O spot-checks: 32/32 pass
-- ✅ AC DEPT column C weights verified
-- ✅ FC 100% hard rule confirmed
+**Parts 2-3 modules (not yet implemented):**
+- `app/master_parser.py` - Master workbook parser
+- `app/allocation_engine.py` - Allocation engine
+- `app/excel_exporter.py` - Citybase Excel exporter
 
 ---
 
-## 🔄 Monthly Workflow
+## 🔄 Part 1 vs Old 4-Step Flow
 
-1. **Receive current Cost Allocation master from Kit** (Excel .xlsx or .xls)
-2. **Collect ~15 CLP bill PDFs** for the target month
-3. **Upload master + bills** to the app
-4. **Run allocation** (weights computed live from master AC DEPT column C)
-5. **Validate** residuals within ±0.01 HKD
-6. **Download Citybase Excel** workbook
-7. **Submit** to Citybase Property Management
+| Old Flow (PR #1 draft) | New Flow (Part 1) |
+|------------------------|-------------------|
+| Step 1: Upload Master | Step 1: Set Month **first** |
+| Step 2: Upload Bills | Step 2: Scan Folder **or** Upload Bills |
+| Step 3: Allocate | Step 3: Fill Meter Log |
+| Step 4: Download Excel | Step 4: Gate Check → Continue to Part 2 (TODO) |
 
-**⚠️ Critical:** Always use the **current master** for the month. Do not reuse old masters.
+**Key change:** Part 1 reshapes the flow to **bills + meter log first**, not master-first. Gate validation blocks Part 2 until intake is complete.
+
+---
+
+## 📝 Version History
+
+### v1.0.0-part1 (September 2026)
+
+**Shipped:**
+- ✅ Part 1: Bills + meter log first intake flow
+- ✅ Designated folder scan (preferred for Omarchy)
+- ✅ Browser upload fallback
+- ✅ Hard gate: 15 accounts, same month, no duplicates, meter log complete
+- ✅ Meter log form + Excel generation (`meter_log_YYYY-MM.xlsx`)
+- ✅ Session storage (parsed bill summaries)
+- ✅ UI checklist of 15 accounts with status
+- ✅ CLP bill PDF parser (reuse `clp_parser_v2_final.py`)
+- ✅ Local Omarchy test: `uvicorn` on `127.0.0.1:8000`
+
+**Not in Part 1 (TODO Parts 2-3):**
+- ❌ Cost Allocation master upload
+- ❌ Live % recomputation from AC DEPT
+- ❌ Allocation engine
+- ❌ Power master (BI) + detail allocation (audit)
+- ❌ Citybase Cost Sheet / Elect Charge Excel export
+
+### v0.x (Legacy - PR #1 draft)
+
+- Master-first 4-step flow (replaced by bills-first Part 1)
+- Allocation engine + Excel export (moved to Parts 2-3)
 
 ---
 
 ## 🤝 Contributing
 
-### Updating Allocation Rules
+### Extending to Part 2
 
-1. Rules come from the **live master workbook** (AC DEPT column C)
-2. Do NOT hardcode percentages in code
-3. Update master workbook via Kit
-4. Test with July 2026 fixtures before production use
+1. Implement `app/master_parser.py` (AC DEPT column C → weights)
+2. Implement `app/allocation_engine.py` (locked rules from SPEC §2)
+3. Generate power master (BI) + detail cost allocation (audit) Excel/Google Sheets
+4. Update UI to add Part 2 step after Part 1 gate passes
 
-### Adding Features
+### Extending to Part 3
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit changes: `git commit -m "Add feature"`
-4. Push: `git push origin feature/my-feature`
-5. Open a Pull Request
+1. Implement in-place Citybase Excel template updater
+2. Write only changed cells (preserve format, formulas, other months)
+3. Cost Sheet forms + Elect Charge month/date/kWh updates
 
 ---
 
@@ -377,9 +419,9 @@ Internal use only - Citybase Property Management / Fortune Metropolis
 
 **Excel Allocator / Kit Chung**  
 For questions about:
-- Master workbook updates
-- Allocation rule changes
-- Open questions (Q1, Q2)
+- Metropolis accounts or allocation rules
+- Cost Allocation master workbook
+- Citybase Cost Sheet templates
 
 **Repository:**  
 https://github.com/chunghonkit/fortune-metropolis-billing
@@ -388,29 +430,10 @@ https://github.com/chunghonkit/fortune-metropolis-billing
 
 ## 🎉 Acknowledgments
 
-- **Kit Chung** - Excel Allocator, master workbook validation
+- **Kit Chung** - Excel Allocator, master workbook validation, Metropolis rules
 - **Citybase Property Management** - Cost sheet format requirements
-- **CLP** - Electricity bill format (22 parsing rules)
+- **CLP** - Electricity bill format (22 parsing rules from `clp_parser_v2_final.py`)
 
 ---
 
-## 🔖 Version History
-
-### v1.0.0 (September 2026)
-- ✅ Live master workbook integration (AC DEPT column C → weights)
-- ✅ CLP bill PDF parser (reuse clp_parser_v2_final.py)
-- ✅ Allocation engine with ±0.01 HKD residual tolerance
-- ✅ Citybase Excel export (year rollup + per-account forms)
-- ✅ FastAPI web UI
-- ✅ July 2026 fixture tests
-- ✅ Config-gated open questions (Q1, Q2)
-- ✅ FC 100% hard rule
-- ⚠️ Open: Q1 meter mapping, Q2 FiT centre (pending Kit)
-
-### v0.x (Legacy)
-- Client-side demo (index.html + PDF.js)
-- Frozen allocation_config.json (replaced by live master)
-
----
-
-**⚡ Metropolis Electricity Cost Allocation v1.0 | Fortune Metropolis | Citybase Property Management**
+**⚡ Metropolis Electricity Cost Allocation v1.0.0-part1 | Part 1 Only | Local Omarchy Test Ready**
