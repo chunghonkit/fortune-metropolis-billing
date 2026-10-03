@@ -1,0 +1,49 @@
+{
+  "fc_100_percent_hard_rule": true,
+  "fit_handling": {
+    "description": "LOCKED: Add FiT into allocation base (bill total + FiT), then apply fixed % to ALL centres",
+    "method": "add_to_base",
+    "example": "37922 + 4359 = 42281; C = 10% of 42281",
+    "do_not": "post FiT solely to C or DC"
+  },
+  "meter_id_mapping": {
+    "description": "LOCKED: Office chillers - map bill meters to form meters",
+    "mappings": {
+      "7662756": "9092771",
+      "7662761": "9091324"
+    },
+    "accounts": ["13639-58422-3", "79292-23337-6"],
+    "allocation": "92% AO / 8% OC",
+    "apply_mapping": true
+  },
+  "special_cases": {
+    "fit_accounts": {
+      "52167-13569-2": {
+        "meters": ["9144186", "10353005", "9144880"],
+        "description": "Bulk+FiT Large account"
+      },
+      "00776-78552-1": {
+        "meters": ["9144816", "10352137"],
+        "description": "Bulk+FiT Small account - Q2 pending"
+      }
+    },
+    "ac_sw_split_account": {
+      "55861-52267-1": {
+        "description": "Special AC/SW split - weights from AC DEPT"
+      }
+    }
+  },
+  "validation": {
+    "residual_tolerance_hkd": 0.01,
+    "ignore_ref_errors": true
+  },
+  "notes": [
+    "Runtime allocation % computed from live master AC DEPT column C weights",
+    "FC 100% stays outside master (hard rule)",
+    "FiT added to base BEFORE applying % (bill total + FiT = actual base)",
+    "Office chillers: bill meters 7662756/7662761 map to form meters 9092771/9091324",
+    "Cost Allocat 2× #REF! is non-blocking - safely ignored",
+    "JSON configs (metropolis_allocation_rules.json, allocation_config.json) are FIXTURES ONLY",
+    "NOT runtime source of truth - use for tests/validation only"
+  ]
+}

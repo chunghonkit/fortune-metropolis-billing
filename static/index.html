@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metropolis Cost Allocation Dashboard</title>
+    <style>
+        :root {
+            --color-primary: #2563eb;
+            --color-primary-hover: #1d4ed8;
+            --color-success: #10b981;
+            --color-warning: #f59e0b;
+            --color-error: #ef4444;
+            --color-neutral: #6b7280;
+            
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-sidebar: #0f172a;
+            --bg-card: #ffffff;
+            
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --text-sidebar: #e2e8f0;
+            
+            --border-color: #e2e8f0;
+            --sidebar-width: 260px;
+            
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        [data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --bg-sidebar: #020617;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .app-shell {
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-sidebar);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 16px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            z-index: 10;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 32px;
+            padding: 0 8px;
+        }
+        
+        .logo-icon {
+            display: inline-block;
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--color-primary), #3b82f6);
+            border-radius: 8px;
+            text-align: center;
+            line-height: 36px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            padding: 0 8px;
+            margin-bottom: 12px;
+        }
+        
+        .month-picker {
+            margin-bottom: 32px;
+        }
+        
+        .month-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        
+        .month-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .btn-month {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--color-primary);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-month:hover {
+            background: var(--color-primary-hover);
+        }
+        
+        .nav-items {
+            flex: 1;
+            margin-bottom: 24px;
+        }
+        
+        .nav-item {
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            color: var(--text-sidebar);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .nav-item.active {
+            background: rgba(37, 99, 235, 0.15);
+            color: #60a5fa;
+        }
+        
+        .nav-item.locked {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .nav-item:not(.locked):not(.active):hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .nav-icon {
+            width: 20px;
+            text-align: center;
+        }
+        
+        .theme-toggle-btn {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .theme-toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        /* Main Canvas */
+        .main-canvas {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            gap: 20px;
+            max-width: 1400px;
+        }
+        
+        /* KPI Row */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+        }
+        
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .kpi-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .kpi-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .kpi-value.success {
+            color: var(--color-success);
+        }
+        
+        .kpi-value.error {
+            color: var(--color-error);
+        }
+        
+        .kpi-value.warning {
+            color: var(--color-warning);
+        }
+        
+        /* Card */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .card-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        
+        .card-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        /* Buttons */
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: var(--color-primary-hover);
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--bg-primary);
+        }
+        
+        .btn-success {
+            background: var(--color-success);
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            background: #059669;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Info Box */
+        .info-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+        
+        .info-box code {
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--color-primary);
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .tab {
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .tab.active {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Account Board */
+        .account-board {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        
+        .account-tile {
+            padding: 14px 16px;
+            border-radius: 8px;
+            border: 2px solid;
+            transition: all 0.2s;
+            cursor: default;
+        }
+        
+        .account-tile.empty {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+            opacity: 0.6;
+        }
+        
+        .account-tile.matched {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--color-success);
+        }
+        
+        .account-tile.missing {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+        }
+        
+        .account-tile.duplicate {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: var(--color-warning);
+        }
+        
+        .account-tile.wrong-month {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: var(--color-warning);
+        }
+        
+        .account-tile.unrecognised {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--color-error);
+        }
+        
+        .account-number {
+            font-family: monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .account-role {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        
+        .account-status {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 8px;
+        }
+        
+        .account-tile.matched .account-status {
+            color: var(--color-success);
+        }
+        
+        .account-tile.missing .account-status {
+            color: var(--color-neutral);
+        }
+        
+        .account-tile.duplicate .account-status {
+            color: var(--color-warning);
+        }
+        
+        .account-tile.wrong-month .account-status {
+            color: var(--color-warning);
+        }
+        
+        .account-tile.unrecognised .account-status {
+            color: var(--color-error);
+        }
+        
+        /* Meter Log */
+        .meter-form {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .form-input {
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        /* Gate Banner */
+        .gate-banner {
+            position: sticky;
+            bottom: 0;
+            margin-top: 20px;
+            padding: 20px 24px;
+            border-radius: 12px;
+            border: 2px solid;
+            background: var(--bg-card);
+            box-shadow: var(--shadow-md);
+            transition: all 0.4s ease;
+        }
+        
+        .gate-banner.pending {
+            border-color: var(--border-color);
+        }
+        
+        .gate-banner.failed {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: var(--color-error);
+        }
+        
+        .gate-banner.passed {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: var(--color-success);
+            animation: gatePass 0.6s ease;
+        }
+        
+        @keyframes gatePass {
+            0% { transform: scale(0.98); opacity: 0; }
+            50% { transform: scale(1.01); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .gate-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .gate-info {
+            flex: 1;
+        }
+        
+        .gate-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .gate-banner.failed .gate-title {
+            color: var(--color-error);
+        }
+        
+        .gate-banner.passed .gate-title {
+            color: var(--color-success);
+        }
+        
+        .gate-summary {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .gate-errors {
+            font-size: 12px;
+            color: var(--color-error);
+            margin-top: 8px;
+        }
+        
+        /* Status Alert */
+        .status-alert {
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
+            display: flex;
+            align-items: start;
+            gap: 8px;
+        }
+        
+        .status-alert.info {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--color-primary);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+        }
+        
+        .status-alert.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--color-success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        
+        .status-alert.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--color-error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: currentColor;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .account-board {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            }
+            
+            .meter-form {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+            
+            .kpi-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .account-board {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">M</span>
+                Metropolis
+            </div>
+            
+            <div class="month-picker">
+                <div class="section-label">Billing Month</div>
+                <input type="text" id="monthInput" class="month-input" placeholder="YYYY-MM" />
+                <button class="btn-month" onclick="setMonth()">Set Month</button>
+            </div>
+            
+            <nav class="nav-items">
+                <div class="section-label">Navigation</div>
+                <div class="nav-item active">
+                    <span class="nav-icon">📄</span>
+                    <span>Intake</span>
+                </div>
+                <div class="nav-item locked">
+                    <span class="nav-icon">📊</span>
+                    <span>Master</span>
+                </div>
+                <div class="nav-item locked">
+                    <span class="nav-icon">💰</span>
+                    <span>Allocate</span>
+                </div>
+            </nav>
+            
+            <button class="theme-toggle-btn" onclick="toggleTheme()">
+                <span id="themeIcon">🌙</span>
+                <span>Toggle Theme</span>
+            </button>
+        </aside>
+        
+        <!-- Main Canvas -->
+        <main class="main-canvas">
+            <div class="dashboard-grid">
+                <!-- KPI Row -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Matched</div>
+                        <div class="kpi-value" id="kpiMatched">0 / 15</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Missing</div>
+                        <div class="kpi-value error" id="kpiMissing">15</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Wrong Month</div>
+                        <div class="kpi-value warning" id="kpiWrongMonth">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Duplicates</div>
+                        <div class="kpi-value warning" id="kpiDuplicates">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gate Status</div>
+                        <div class="kpi-value error" id="kpiGate">Blocked</div>
+                    </div>
+                </div>
+                
+                <!-- Bills Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Upload Bills</h2>
+                            <div class="card-subtitle" id="lastScanTime">Select and upload PDF files</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Select PDF files (up to 15)</label>
+                        <input type="file" id="billFiles" class="form-input" accept=".pdf" multiple />
+                    </div>
+                    <button class="btn-primary" onclick="uploadBills()">
+                        ⬆️ Upload & Parse Bills
+                    </button>
+                    <div id="uploadStatus"></div>
+                </div>
+                
+                <!-- Account Board -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">15 Expected Accounts</h2>
+                            <div class="card-subtitle">Metropolis CLP accounts with live status</div>
+                        </div>
+                    </div>
+                    
+                    <div class="account-board" id="accountBoard">
+                        <!-- Tiles populated by JS -->
+                    </div>
+                </div>
+                
+                <!-- Meter Log Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Meter Log</h2>
+                            <div class="card-subtitle">Check-meter 6681757 (散熱水泵電 / Sea Water Pump)</div>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn-success" onclick="saveMeterLog()">
+                                💾 Save
+                            </button>
+                            <button class="btn-secondary" onclick="downloadMeterLog()">
+                                📥 Download Excel
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="meter-form">
+                        <div class="form-group">
+                            <label class="form-label">Previous Reading</label>
+                            <input type="number" step="0.1" id="meterPrevious" class="form-input" placeholder="e.g., 95966.6" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Present Reading</label>
+                            <input type="number" step="0.1" id="meterPresent" class="form-input" placeholder="e.g., 96323.1" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Read Date (optional)</label>
+                            <input type="date" id="meterDate" class="form-input" />
+                        </div>
+                    </div>
+                    <div id="meterStatus"></div>
+                </div>
+                
+                <!-- Gate Banner -->
+                <div id="gateBanner" class="gate-banner pending">
+                    <div class="gate-content">
+                        <div class="gate-info">
+                            <div class="gate-title">Gate Validation</div>
+                            <div class="gate-summary">Set month and parse bills to validate gate conditions</div>
+                            <div class="gate-errors" id="gateErrors"></div>
+                        </div>
+                        <button id="continueBtn" class="btn-success" onclick="continueToPart2()" disabled>
+                            ▶️ Continue to Part 2
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        const API_BASE = '';
+        
+        // Expected accounts with roles
+        const EXPECTED_ACCOUNTS = [
+            { account: '55861-52267-1', role: 'Retail chillers → AC/SW' },
+            { account: '24096-78457-6', role: 'Multi-centre (office)' },
+            { account: '13639-58422-3', role: 'Office chiller → AO/OC' },
+            { account: '40722-61440-7', role: 'Multi-centre (carpark)' },
+            { account: '35204-69738-4', role: 'Multi-centre (carpark)' },
+            { account: '97968-02236-6', role: 'DC 100%' },
+            { account: '23529-59279-9', role: 'SW 100%' },
+            { account: '79292-23337-6', role: 'Office chiller → AO/OC' },
+            { account: '52167-13569-2', role: 'FiT (retail)' },
+            { account: '08731-83914-5', role: 'DC 100%' },
+            { account: '00776-78552-1', role: 'FiT' },
+            { account: '88931-57029-6', role: 'C 100%' },
+            { account: '70873-85471-3', role: 'SA 100%' },
+            { account: '72399-00664-9', role: 'SA 100%' },
+            { account: '82805-94744-7', role: 'Food Court → FC 100%' },
+        ];
+        
+        // Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            document.getElementById('themeIcon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            localStorage.setItem('theme', newTheme);
+        }
+        
+        // Load theme and config
+        window.addEventListener('load', () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('themeIcon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            
+            const today = new Date();
+            document.getElementById('monthInput').value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            
+            initAccountBoard();
+        });
+        
+        // Initialize account board
+        function initAccountBoard() {
+            const board = document.getElementById('accountBoard');
+            board.innerHTML = EXPECTED_ACCOUNTS.map(({ account, role }) => `
+                <div class="account-tile empty" id="tile-${account}">
+                    <div class="account-number">${account}</div>
+                    <div class="account-role">${role}</div>
+                    <div class="account-status">—</div>
+                </div>
+            `).join('');
+        }
+        
+        // Set month
+        async function setMonth() {
+            const monthInput = document.getElementById('monthInput');
+            
+            if (!monthInput.value) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/set-month`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({month: monthInput.value})
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Month set successfully
+                }
+            } catch (error) {
+                console.error('Error setting month:', error);
+            }
+        }
+        
+        // Upload bills
+        async function uploadBills() {
+            const fileInput = document.getElementById('billFiles');
+            const status = document.getElementById('uploadStatus');
+            
+            if (!fileInput.files.length) {
+                status.innerHTML = '<div class="status-alert error">Please select PDF files</div>';
+                return;
+            }
+            
+            const formData = new FormData();
+            for (let file of fileInput.files) {
+                formData.append('files', file);
+            }
+            
+            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Uploading and parsing...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/upload-bills`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const now = new Date().toLocaleTimeString();
+                    document.getElementById('lastScanTime').textContent = `Last upload: ${now}`;
+                    status.innerHTML = `<div class="status-alert success">✓ Parsed ${result.bills_parsed} bills</div>`;
+                    displayGate(result.gate_status);
+                } else {
+                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+            }
+        }
+        
+        // Display gate
+        function displayGate(gate) {
+            if (!gate) return;
+            
+            // Update KPIs
+            document.getElementById('kpiMatched').textContent = `${gate.summary.matched} / 15`;
+            document.getElementById('kpiMissing').textContent = gate.summary.missing;
+            document.getElementById('kpiWrongMonth').textContent = gate.summary.wrong_month;
+            document.getElementById('kpiDuplicates').textContent = gate.summary.duplicates;
+            document.getElementById('kpiGate').textContent = gate.passed ? 'Passed' : 'Blocked';
+            document.getElementById('kpiGate').className = gate.passed ? 'kpi-value success' : 'kpi-value error';
+            
+            // Update account tiles
+            for (const [account, info] of Object.entries(gate.account_checklist)) {
+                const tile = document.getElementById(`tile-${account}`);
+                if (tile) {
+                    tile.className = `account-tile ${info.status}`;
+                    const statusLabel = {
+                        'matched': '✓ Matched',
+                        'missing': '— Missing',
+                        'duplicate': '⚠ Duplicate',
+                        'wrong_month': '⚠ Wrong Month',
+                        'unrecognised': '✗ Unrecognised'
+                    }[info.status];
+                    tile.querySelector('.account-status').textContent = statusLabel;
+                }
+            }
+            
+            // Update gate banner
+            const banner = document.getElementById('gateBanner');
+            const gateClass = gate.passed ? 'passed' : (gate.errors.length > 0 ? 'failed' : 'pending');
+            banner.className = `gate-banner ${gateClass}`;
+            
+            const title = banner.querySelector('.gate-title');
+            const summary = banner.querySelector('.gate-summary');
+            const errors = document.getElementById('gateErrors');
+            
+            if (gate.passed) {
+                title.textContent = '✓ Gate PASSED';
+                summary.textContent = 'All conditions met. Ready to continue to Part 2.';
+                errors.textContent = '';
+            } else {
+                title.textContent = 'Gate Validation';
+                summary.textContent = `${gate.summary.matched}/15 matched, ${gate.summary.missing} missing`;
+                if (gate.errors.length > 0) {
+                    errors.textContent = gate.errors.join(' • ');
+                }
+            }
+            
+            document.getElementById('continueBtn').disabled = !gate.passed;
+        }
+        
+        // Save meter log
+        async function saveMeterLog() {
+            const previous = document.getElementById('meterPrevious').value;
+            const present = document.getElementById('meterPresent').value;
+            const readDate = document.getElementById('meterDate').value;
+            const status = document.getElementById('meterStatus');
+            
+            if (!previous || !present) {
+                status.innerHTML = '<div class="status-alert error">Please enter both readings</div>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('previous', previous);
+            formData.append('present', present);
+            if (readDate) formData.append('read_date', readDate);
+            
+            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Saving...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/meter-log`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const delta = result.delta || 0;
+                    status.innerHTML = `<div class="status-alert success">✓ Saved: Δ = ${delta.toLocaleString()} kWh</div>`;
+                    if (result.gate_status) displayGate(result.gate_status);
+                } else {
+                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+            }
+        }
+        
+        // Download meter log
+        function downloadMeterLog() {
+            window.location.href = `${API_BASE}/api/download-meter-log`;
+        }
+        
+        // Continue to Part 2
+        async function continueToPart2() {
+            const button = document.getElementById('continueBtn');
+            const banner = document.getElementById('gateBanner');
+            const summary = banner.querySelector('.gate-summary');
+            const errors = document.getElementById('gateErrors');
+            
+            // Disable button and show processing state
+            button.disabled = true;
+            button.textContent = '⏳ Processing month-end...';
+            summary.textContent = 'Copying previous month\'s workbooks and updating with current data...';
+            errors.innerHTML = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/process-month-end`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    // Success - show updated file paths
+                    button.textContent = '✓ Month-End Complete';
+                    summary.textContent = result.message;
+                    
+                    // Display updated file paths
+                    const filesList = Object.entries(result.updated_files)
+                        .map(([type, path]) => `${type}: ${path}`)
+                        .join('\n');
+                    
+                    errors.innerHTML = `<div class="status-alert success" style="margin-top: 12px;">
+                        <strong>Updated workbooks:</strong><br>
+                        <pre style="margin-top: 8px; font-size: 11px; overflow-x: auto;">${filesList}</pre>
+                    </div>`;
+                } else {
+                    // Error response
+                    button.textContent = '❌ Month-End Failed';
+                    button.disabled = false;
+                    
+                    const errorMsg = result.detail || result.message || 'Unknown error';
+                    summary.textContent = 'Month-end processing failed.';
+                    errors.innerHTML = `<div class="status-alert error">${errorMsg}</div>`;
+                }
+            } catch (error) {
+                // Network or other error
+                button.textContent = '▶️ Continue to Part 2';
+                button.disabled = false;
+                
+                summary.textContent = 'Error processing month-end.';
+                errors.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
