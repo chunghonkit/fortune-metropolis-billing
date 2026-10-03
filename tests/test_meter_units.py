@@ -6,6 +6,7 @@ April Tower PDF). They are not May Cost Sheet dollars.
 """
 
 import os
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -22,6 +23,103 @@ pytestmark = pytest.mark.skipif(not MASTER.exists(), reason='April master not in
 
 def _by_meter(text):
     return {meter['meter_no']: meter['consumption'] for meter in _extract_meter_consumptions(text)}
+
+
+def test_slash_meter_row_finishes_and_uses_the_units_field():
+    """55861 prints 9024222 / present / previous / factor / units."""
+    line = '9024222 / 24570099 / 24439330 / 1 / 130769'
+    # The old suffix scan did not return on a long prefix of this bill.
+    prefix = ('電錶號碼 FiT 度數 總用電度數 On-Peak 59,910 \n' * 200)
+    started = time.monotonic()
+    found = _by_meter(prefix + line + '\nGrand Total Units Consumed 431,769\n' + prefix)
+    assert time.monotonic() - started < 1.0
+    assert found['9024222'] == 130769
+    assert '24570099' not in found
+    assert '24439330' not in found
+    assert 431769 not in found.values()
+
+
+def test_chiller_slash_rows_do_not_treat_readings_as_meters():
+    text = """
+    9048406 / 18000000 / 17800000 / 1 / 200000
+    9026169 / 15000000 / 14900000 / 1 / 100000
+    9024222 / 24570099 / 24439330 / 1 / 130769
+    9026183 / 10001000 / 10000000 / 1 / 1000
+    Grand Total Units Consumed 431,769
+    """
+    assert _by_meter(text) == {
+        '9048406': 200000,
+        '9026169': 100000,
+        '9024222': 130769,
+        '9026183': 1000,
+    }
+
+
+def test_parsed_slash_units_set_o7():
+    text = """
+    9048406 / 18000000 / 17800000 / 1 / 200000
+    9026169 / 15000000 / 14900000 / 1 / 100000
+    9024222 / 24570099 / 24439330 / 1 / 130769
+    9026183 / 10001000 / 10000000 / 1 / 1000
+    """
+    meters = _extract_meter_consumptions(text)
+    units = next(m['consumption'] for m in meters if m['meter_no'] == '9024222')
+    assert units == 130769
+    bills = [{
+        'account': '55861-52267-1',
+        'total_amount': 500000,
+        'meters': meters,
+    }]
+    meter_log = {'meter_no': '6681757', 'previous': 96323.1, 'present': 96504.6}
+    model = CitybaseModel(str(MASTER))
+    result = model.allocate(bills, meter_log)
+    o7 = next(
+        model._percentages(Decimal('181.5'), Decimal(units))[row]
+        for row, line in model.alloc_lines.items()
+        if line['kind'] == 'check_sw'
+    )
+    assert abs(float(o7) - (181.5 * 160 / units)) < 1e-12
+    assert abs(float(o7) - 0.2221) < 0.0001
+    ac = sum(a['amount'] for a in result['allocations']
+             if a['account'] == '55861-52267-1' and a['centre'] == 'AC')
+    sw = sum(a['amount'] for a in result['allocations']
+             if a['account'] == '55861-52267-1' and a['centre'] == 'SW')
+    assert result['validation']['errors'] == []
+    assert abs(ac + sw - 500000) < 0.05
+    # SW is O7 of the 9024222 line plus the whole 9026183 line.
+    assert sw > 0 and ac > sw
+
+
+def test_parse_clp_bill_on_slash_text_returns(tmp_path):
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text(
+        (72, 72),
+        "55861-52267-1\n"
+        "9024222 / 24570099 / 24439330 / 1 / 130769\n"
+        "Grand Total Units Consumed 130,769\n",
+    )
+    path = tmp_path / '55861.pdf'
+    doc.save(path)
+    doc.close()
+    started = time.monotonic()
+    parsed = parse_clp_bill(str(path))
+    assert time.monotonic() - started < 2
+    assert parsed['account'] == '55861-52267-1'
+    by_meter = {m['meter_no']: m['consumption'] for m in parsed['meters']}
+    assert by_meter['9024222'] == 130769
+
+
+def test_fit_slash_row_keeps_the_fit_label():
+    text = """
+    9133719 / 20000000 / 19911471 / 1 / 88529
+    9115936 / 5004808 / 5000000 / 1 / FiT 4808
+    10220967 / 8003190 / 8000000 / 1 / 3190
+    """
+    found = _by_meter(text)
+    assert found == {'9133719': 88529, '9115936': 4808, '10220967': 3190}
 
 
 def test_register_line_keeps_factor_and_allows_commas():

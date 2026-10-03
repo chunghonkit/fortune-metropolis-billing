@@ -46,8 +46,23 @@ _READING_LINE = re.compile(
 )
 # Units sit in the next token: "161,494", "43,494.50", "59911.00", "4,808",
 # or a bare integer. "FiT" may sit between the meter and the units.
+# No IGNORECASE flag: Python's \s under re.I backtracks on long bill text.
+_FIT = r'[Ff][Ii][Tt]'
 _UNITS = r'(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{1,6})(?!\d)'
-_UNITS_LINE = re.compile(_METER + r'(?:\s+FiT)?' + r'\s+' + _UNITS, re.I)
+_UNITS_LINE = re.compile(_METER + r'(?:\s+' + _FIT + r')?' + r'\s+' + _UNITS)
+# Bulk meter table, as printed on 55861:
+#   9024222 / 24570099 / 24439330 / 1 / 130769
+# meter / present / previous / factor / units. The last field is the kWh.
+_SLASH_SEP = r'\s*/\s*'
+_SLASH_READING = r'(\d{1,3}(?:,\d{3})+|\d{6,9})'
+_SLASH_METER = re.compile(
+    r'(?<!\d)(\d{7,8})(?!\d)'
+    + _SLASH_SEP + _SLASH_READING
+    + _SLASH_SEP + _SLASH_READING
+    + _SLASH_SEP + r'(\d{1,3})'
+    + _SLASH_SEP + r'(?:' + _FIT + r'\s+)?'
+    + r'(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,7}(?:\.\d+)?)(?!\d)'
+)
 _TOKEN = re.compile(
     r'(?<!\d)(?P<meter>\d{7,8})(?!\d)'
     r'|(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+)'
@@ -77,10 +92,25 @@ def _overlaps(span, spans):
 
 
 def _in_meter_run(text, start):
-    """True when this meter continues a stacked 電錶號碼 column."""
-    before = text[:start]
-    before = re.sub(r'(?:\s+|FiT\b)+$', '', before, flags=re.I)
-    return re.search(r'(?<!\d)\d{7,8}$', before) is not None
+    """True when this meter continues a stacked 電錶號碼 column.
+
+    Walks back over whitespace and an optional FiT label. This used to be a
+    regex substitution with IGNORECASE, which did not finish on the 55861 text.
+    """
+    i = start
+    while i > 0 and text[i - 1].isspace():
+        i -= 1
+    if i >= 3 and text[i - 3:i].lower() == 'fit' and (i == 3 or not text[i - 4].isalnum()):
+        i -= 3
+        while i > 0 and text[i - 1].isspace():
+            i -= 1
+    digit_start = i
+    while digit_start > 0 and text[digit_start - 1].isdigit() and (i - digit_start) < 8:
+        digit_start -= 1
+    length = i - digit_start
+    if length not in (7, 8):
+        return False
+    return digit_start == 0 or not text[digit_start - 1].isdigit()
 
 
 def _append_meter(out_list, seen, meter_no, consumption, factor=1, previous=None, present=None):
@@ -123,8 +153,13 @@ def _extract_columnar_units(text, meters, seen, consumed):
         if tokens[index][0] != 'meter':
             index += 1
             continue
-        end = index
+        end = index + 1
         while end < len(tokens) and tokens[end][0] == 'meter':
+            gap = text[tokens[end - 1][2][1]:tokens[end][2][0]]
+            # "9024222 / 24570099 / 24439330" is one meter's readings, not a
+            # column of meter ids. A slash between them ends the run.
+            if '/' in gap:
+                break
             end += 1
         run = [token for token in tokens[index:end] if token[1] not in seen]
         number_end = end
@@ -145,11 +180,13 @@ def _extract_meter_consumptions(text):
     Meter kWh from a CLP bill.
 
     Tried in order, and only the immediate next tokens are used:
-    1. English register line: meter, factor, previous, present
+    1. Bulk table row: meter / present / previous / factor / units.
+       The units field is the kWh (55861 prints 9024222 this way).
+    2. English register line: meter, factor, previous, present
        (commas allowed). Consumption is (present − previous) × factor.
-    2. The next token is the units, optionally after the word FiT
+    3. The next token is the units, optionally after the word FiT
        (Rule 4 "9048406 161,494 + …" and Rule 10 "9115936 FiT 4,808").
-    3. A columnar 電錶號碼 / 度數 block whose meters are stacked apart
+    4. A columnar 電錶號碼 / 度數 block whose meters are stacked apart
        from their units.
     """
     text = _normalize_bill_text(text or '')
@@ -157,7 +194,27 @@ def _extract_meter_consumptions(text):
     seen = set()
     consumed = []
 
+    for match in _SLASH_METER.finditer(text):
+        meter_no, first_s, second_s, factor_s, units_s = match.groups()
+        try:
+            first = _number(first_s)
+            second = _number(second_s)
+            factor = int(factor_s)
+            units = _number(units_s)
+        except ValueError:
+            continue
+        if factor < 1 or factor > 100:
+            continue
+        delta = abs(first - second) * factor
+        if abs(delta - units) > 1:
+            continue
+        present, previous = (first, second) if first >= second else (second, first)
+        if _append_meter(meters, seen, meter_no, units, factor, previous, present):
+            consumed.append(match.span())
+
     for match in _READING_LINE.finditer(text):
+        if _overlaps(match.span(), consumed):
+            continue
         meter_no, factor_s, prev_s, present_s = match.groups()
         try:
             factor = int(factor_s)
