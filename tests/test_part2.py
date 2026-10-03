@@ -840,6 +840,116 @@ class TestWorkbookValueUpdates:
                 "SW row should be empty when centre is keyed by amount"
             
             wb_wrong.close()
+    
+    def test_ac_dept_parses_centre_from_label_not_weight(self):
+        """
+        Regression test: AC DEPT parser must use centre LABEL (column B), not WEIGHT (column C).
+        
+        May 2025 rerun showed numeric keys like "216328.807591692" instead of "AC", "FC", "SW".
+        Root cause: parser was using the weight value as the centre name.
+        
+        Correct structure:
+        - Column A: Account
+        - Column B: Centre label (FC, AC, SW, etc.)
+        - Column C: Weight value (numeric)
+        """
+        from app.master_parser import MasterWorkbookParser
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            
+            # Create a master workbook with AC DEPT sheet shaped like real Citybase
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            ac_dept = wb.create_sheet("AC DEPT")
+            
+            # Header row
+            ac_dept['A1'] = 'Account/Meter'
+            ac_dept['B1'] = 'Centre'
+            ac_dept['C1'] = 'Weight'
+            
+            # Account 55861-52267-1: AC 72.54%, SW 27.46%
+            ac_dept['A2'] = '55861-52267-1'
+            ac_dept['B2'] = 'AC'  # Centre LABEL
+            ac_dept['C2'] = 525.48  # Weight VALUE
+            
+            ac_dept['A3'] = '55861-52267-1'
+            ac_dept['B3'] = 'SW'  # Centre LABEL
+            ac_dept['C3'] = 198.99  # Weight VALUE
+            
+            # Account 52167-13569-2: AC 10.39%, C 62.71%, DC 23.43%
+            ac_dept['A4'] = '52167-13569-2'
+            ac_dept['B4'] = 'AC'
+            ac_dept['C4'] = 10388.15
+            
+            ac_dept['A5'] = '52167-13569-2'
+            ac_dept['B5'] = 'C'
+            ac_dept['C5'] = 62705.08
+            
+            ac_dept['A6'] = '52167-13569-2'
+            ac_dept['B6'] = 'DC'
+            ac_dept['C6'] = 23428.44
+            
+            wb_file = tmpdir / 'Cost Allocation.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Parse the AC DEPT sheet
+            parser = MasterWorkbookParser(str(wb_file))
+            rules = parser.parse()
+            
+            # Verify account 55861-52267-1
+            assert '55861-52267-1' in rules, "55861-52267-1 should be in rules"
+            allocations_55861 = rules['55861-52267-1']
+            assert len(allocations_55861) == 2, f"55861 should have 2 centres, got {len(allocations_55861)}"
+            
+            # Find AC and SW allocations
+            ac_alloc = next((a for a in allocations_55861 if a['centre'] == 'AC'), None)
+            sw_alloc = next((a for a in allocations_55861 if a['centre'] == 'SW'), None)
+            
+            assert ac_alloc is not None, "55861 should have AC allocation"
+            assert sw_alloc is not None, "55861 should have SW allocation"
+            
+            # Check centres are string labels, not numeric weights
+            assert ac_alloc['centre'] == 'AC', f"Centre should be 'AC', got {ac_alloc['centre']}"
+            assert sw_alloc['centre'] == 'SW', f"Centre should be 'SW', got {sw_alloc['centre']}"
+            
+            # Check percentages computed from weights
+            expected_ac_pct = 525.48 / (525.48 + 198.99)
+            expected_sw_pct = 198.99 / (525.48 + 198.99)
+            
+            assert abs(ac_alloc['percentage'] - expected_ac_pct) < 0.001, \
+                f"AC % should be {expected_ac_pct:.4f}, got {ac_alloc['percentage']:.4f}"
+            assert abs(sw_alloc['percentage'] - expected_sw_pct) < 0.001, \
+                f"SW % should be {expected_sw_pct:.4f}, got {sw_alloc['percentage']:.4f}"
+            
+            # Verify account 52167-13569-2
+            assert '52167-13569-2' in rules, "52167-13569-2 should be in rules"
+            allocations_52167 = rules['52167-13569-2']
+            assert len(allocations_52167) == 3, f"52167 should have 3 centres, got {len(allocations_52167)}"
+            
+            # Verify centres are labels not weights
+            centres_52167 = {a['centre'] for a in allocations_52167}
+            assert centres_52167 == {'AC', 'C', 'DC'}, \
+                f"52167 centres should be {{AC, C, DC}}, got {centres_52167}"
+            
+            # Verify NO numeric keys (weights mistaken for centres)
+            all_centres = set()
+            for account_allocs in rules.values():
+                for alloc in account_allocs:
+                    all_centres.add(alloc['centre'])
+            
+            # Check that no centre looks like a number
+            for centre in all_centres:
+                try:
+                    # If it parses as a float, it's a weight mistaken for a centre (BUG)
+                    float(centre)
+                    assert False, f"Centre '{centre}' is numeric - weight was mistaken for centre label!"
+                except ValueError:
+                    # Good - centre is a string label, not a number
+                    pass
 
 
 if __name__ == '__main__':

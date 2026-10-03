@@ -228,9 +228,10 @@ class MasterWorkbookParser:
         Parse AC DEPT sheet using column C weights (runtime source of truth).
         
         Expected structure:
-        - Column A or B: Account/Meter ID
+        - Column A: Account/Meter ID
+        - Column B: Centre label (FC, AC, SW, C, DC, etc.)
         - Column C: Weight value
-        - Rows grouped by account (multiple cost centres per account)
+        - Rows grouped by account (multiple rows per account, one per centre)
         - Compute percentage = weight / Σ(weights) for each account group
         
         Example:
@@ -239,6 +240,9 @@ class MasterWorkbookParser:
             55861       SW        198.99
             → AC: 525.48 / (525.48 + 198.99) = 72.54%
             → SW: 198.99 / (525.48 + 198.99) = 27.46%
+        
+        CRITICAL: Centre identity comes from column B (the label), NOT from column C (the weight)!
+        Using the weight as the centre name causes numeric keys like "216328.807591692" instead of "AC".
         """
         allocations = {}
         
@@ -250,13 +254,12 @@ class MasterWorkbookParser:
         # Find header row
         header_row_idx = 0
         for idx, row in enumerate(rows[:10]):
-            if any(str(cell).lower() in ['account', 'meter', 'acct', 'a/c', 'weight'] 
+            if any(str(cell).lower() in ['account', 'meter', 'acct', 'a/c', 'weight', 'centre', 'center'] 
                    for cell in row if cell):
                 header_row_idx = idx
                 break
         
-        # Parse structure: look for account, centre, weight columns
-        # Try to auto-detect column positions
+        # Parse structure: account in A, centre in B, weight in C
         headers = [str(cell).strip().lower() if cell else '' for cell in rows[header_row_idx]]
         
         # Find columns
@@ -267,23 +270,26 @@ class MasterWorkbookParser:
         for idx, h in enumerate(headers):
             if 'account' in h or 'meter' in h or 'acct' in h or 'a/c' in h:
                 account_col = idx
-            elif 'centre' in h or 'center' in h or 'dept' in h or 'cost' in h:
+            elif 'centre' in h or 'center' in h or 'cost' in h or 'dept' in h:
                 centre_col = idx
             elif 'weight' in h or h == 'c':  # Column C is often labeled 'weight' or just 'c'
                 weight_col = idx
         
-        # If columns not found by header, use common positions
+        # If columns not found by header, use standard positions for AC DEPT sheet
+        # CRITICAL: Account in A (0), Centre in B (1), Weight in C (2)
         if account_col is None:
             account_col = 0  # Column A
         if centre_col is None:
-            centre_col = 1  # Column B
+            centre_col = 1  # Column B - CENTRE LABEL
         if weight_col is None:
-            weight_col = 2  # Column C
+            weight_col = 2  # Column C - WEIGHT VALUE
         
-        # Group rows by account and collect weights
+        logger.info(f"AC DEPT columns: account={account_col}, centre={centre_col}, weight={weight_col}")
+        
+        # Group rows by account and collect centre+weight pairs
         account_groups = {}
         
-        for row in rows[header_row_idx + 1:]:
+        for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             if not row or all(cell is None for cell in row):
                 continue
             
@@ -296,22 +302,30 @@ class MasterWorkbookParser:
             if not account or account.lower() in ['none', 'total', '']:
                 continue
             
-            # Get centre
+            # Get centre LABEL from column B (not the weight!)
             centre_val = row[centre_col] if centre_col < len(row) else None
             if centre_val is None or str(centre_val).startswith('#'):
+                logger.debug(f"Row {row_idx}: account {account} has no centre label in column {centre_col}")
                 continue
-            centre = str(centre_val).strip()
             
-            # Get weight
+            centre = str(centre_val).strip()
+            if not centre or centre.lower() in ['none', '']:
+                logger.debug(f"Row {row_idx}: account {account} has empty centre label")
+                continue
+            
+            # Get weight VALUE from column C
             weight_val = row[weight_col] if weight_col < len(row) else None
             if weight_val is None or str(weight_val).startswith('#'):
+                logger.debug(f"Row {row_idx}: account {account} centre {centre} has no weight")
                 continue
             
             try:
                 weight = float(weight_val)
                 if weight <= 0:
+                    logger.debug(f"Row {row_idx}: account {account} centre {centre} has non-positive weight {weight}")
                     continue
             except (ValueError, TypeError):
+                logger.debug(f"Row {row_idx}: account {account} centre {centre} has invalid weight {weight_val}")
                 continue
             
             # Add to account group
@@ -322,11 +336,13 @@ class MasterWorkbookParser:
                 'centre': centre,
                 'weight': weight
             })
+            logger.debug(f"Row {row_idx}: account {account} centre {centre} weight {weight}")
         
         # Compute percentages for each account
         for account, entries in account_groups.items():
             total_weight = sum(e['weight'] for e in entries)
             if total_weight == 0:
+                logger.warning(f"Account {account} has zero total weight")
                 continue
             
             allocations[account] = [
@@ -337,7 +353,7 @@ class MasterWorkbookParser:
                 for e in entries
             ]
             
-            logger.debug(f"Account {account}: {len(entries)} centres, total weight {total_weight}")
+            logger.info(f"Account {account}: {len(entries)} centres, total weight {total_weight:.2f}")
         
         return allocations
     

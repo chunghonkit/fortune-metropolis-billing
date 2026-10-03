@@ -616,30 +616,31 @@ async def process_month_end():
         metropolis_root = get_metropolis_root()
         
         # Find the Cost Allocation workbook to use as master (AC DEPT sheet defines allocations)
+        # CRITICAL: Never use current month's out/ directory - that's the file we're about to overwrite!
         # Priority:
-        # 1. Current month's out/ directory (if month-end already run once)
-        # 2. Current month's main directory
-        # 3. Previous month's out/ directory
-        # 4. Previous month's main directory
-        # 5. masters/ subfolder
-        # 6. Test data
+        # 1. Previous month's main directory (untouched source)
+        # 2. Previous month's out/ directory (if that month was processed)
+        # 3. Current month's main directory (if not yet moved to out/)
+        # 4. masters/ subfolder
+        # 5. Test data fallback
         master_candidates = [
-            # Current month locations
-            metropolis_root / billing_month / 'out' / 'Cost Allocation - Electricity 2007-2.xls',
-            metropolis_root / billing_month / 'out' / 'Cost Allocation - Electricity 2007-2.xlsx',
-            metropolis_root / billing_month / 'Cost Allocation - Electricity 2007-2.xls',
-            metropolis_root / billing_month / 'Cost Allocation - Electricity 2007-2.xlsx',
-            # Previous month locations
-            metropolis_root / previous_month / 'out' / 'Cost Allocation - Electricity 2007-2.xls',
-            metropolis_root / previous_month / 'out' / 'Cost Allocation - Electricity 2007-2.xlsx',
+            # Previous month locations (PRIORITY - untouched source)
             metropolis_root / previous_month / 'Cost Allocation - Electricity 2007-2.xls',
             metropolis_root / previous_month / 'Cost Allocation - Electricity 2007-2.xlsx',
-            # Generic names
+            metropolis_root / previous_month / 'out' / 'Cost Allocation - Electricity 2007-2.xls',
+            metropolis_root / previous_month / 'out' / 'Cost Allocation - Electricity 2007-2.xlsx',
+            metropolis_root / previous_month / 'Cost Allocation.xls',
+            metropolis_root / previous_month / 'Cost Allocation.xlsx',
+            # Current month main directory (not out/ - that's being written to!)
+            metropolis_root / billing_month / 'Cost Allocation - Electricity 2007-2.xls',
+            metropolis_root / billing_month / 'Cost Allocation - Electricity 2007-2.xlsx',
             metropolis_root / billing_month / 'Cost Allocation.xls',
             metropolis_root / billing_month / 'Cost Allocation.xlsx',
             # masters subfolder
             metropolis_root / billing_month / 'masters' / 'Cost Allocation.xlsx',
             metropolis_root / billing_month / 'masters' / 'cost_allocation_master.xlsx',
+            metropolis_root / previous_month / 'masters' / 'Cost Allocation.xlsx',
+            metropolis_root / previous_month / 'masters' / 'cost_allocation_master.xlsx',
             # Test data fallback
             Path('data/masters/cost_allocation_master.xlsx'),
         ]
@@ -652,7 +653,7 @@ async def process_month_end():
                 break
         
         if not master_path:
-            raise HTTPException(400, f"Cost Allocation master not found. Checked current/previous month folders.")
+            raise HTTPException(400, f"Cost Allocation master not found. Checked previous/current month folders.")
         
         # Parse master workbook to get allocation rules (from AC DEPT sheet)
         from app.master_parser import compute_weights_from_master

@@ -206,10 +206,16 @@ class AllocationEngine:
         Find allocation rules for an account.
         
         Tries multiple lookup strategies:
-        1. Full account number (e.g., "52167-13569-2")
-        2. Short account number (first segment, e.g., "52167")
-        3. Meter number with LOCKED mapping (7662756→9092771, 7662761→9091324)
+        1. LOCKED RULE: Food Court account 82805-94744-7 is 100% FC (outside master)
+        2. Full account number (e.g., "52167-13569-2")
+        3. Short account number (first segment, e.g., "52167")
+        4. Meter number with LOCKED mapping (7662756→9092771, 7662761→9091324)
         """
+        # LOCKED RULE: Food Court account 82805-94744-7 = FC 100% (outside master)
+        if account == '82805-94744-7':
+            logger.info(f"Account {account}: FC 100% hard rule (outside master)")
+            return [{'centre': 'FC', 'percentage': 1.0}]
+        
         # Try full account
         if account in self.allocation_rules:
             return self.allocation_rules[account]
