@@ -12,14 +12,425 @@ Critical rules:
 """
 
 import openpyxl
+from openpyxl.workbook.defined_name import DefinedName
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import shutil
 import logging
+import re
 from decimal import Decimal, ROUND_HALF_UP
 
 logger = logging.getLogger(__name__)
+
+_ACCOUNT_RE = re.compile(r'\d{5}-\d{5}-\d')
+_MONEY_RE = re.compile(r'\$\s*[\d,]+\.\d{2}')
+_ROUND_FORMULA_RE = re.compile(
+    r'^=ROUND\((?P<body>.+),2\)(?P<tail>[+-]\d+(?:\.\d+)?)?$'
+)
+_CHECK_METER_SW_NAME = 'CHECK_METER_SW'
+# Citybase's May and June comparison snapshots park the seawater-pump
+# share of meter 9046787 in AC. From July the previous column matches
+# the year-grid centres, with that share left in SW.
+_SEAWATER_RECLASS_BEFORE = '2025-07'
+
+
+def _excel_round(value, places=2):
+    quantum = Decimal('1').scaleb(-places)
+    return float(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
+
+
+def _as_date(value):
+    if isinstance(value, datetime):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip()
+    for fmt in ('%d-%m-%y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _present_units(bill):
+    units = bill.get('billed_units')
+    if units is None:
+        units = bill.get('kwh')
+    if units is None:
+        return None
+    reversed_units = bill.get('reversed_units') or 0
+    units = float(units) - float(reversed_units)
+    if abs(units - round(units)) < 1e-6:
+        return int(round(units))
+    return units
+
+
+def _present_days(bill):
+    reversed_to = bill.get('reversed_to')
+    if reversed_to and bill.get('to_date'):
+        start = _as_date(reversed_to) + timedelta(days=1)
+        end = _as_date(bill['to_date'])
+        return (end - start).days + 1
+    return bill.get('days')
+
+
+def _period_dates(bill):
+    end = _as_date(bill.get('to_date'))
+    if bill.get('reversed_to'):
+        start = _as_date(bill['reversed_to']) + timedelta(days=1)
+    else:
+        start = _as_date(bill.get('from_date'))
+    return start, end
+
+
+def _sheet_account(ws):
+    for row in ws.iter_rows(min_row=1, max_row=20, max_col=40):
+        for cell in row:
+            if isinstance(cell.value, str):
+                found = _ACCOUNT_RE.search(cell.value)
+                if found:
+                    return found.group(0)
+    return None
+
+
+def _period_columns(ws):
+    last_col = present_col = None
+    header_row = None
+    for row in ws.iter_rows(min_row=1, max_row=25, max_col=60):
+        for cell in row:
+            if not isinstance(cell.value, str):
+                continue
+            compact = re.sub(r'\s+', ' ', cell.value).strip().lower()
+            if compact.startswith('last period'):
+                last_col = cell.column
+                header_row = cell.row
+            elif compact.startswith('present period'):
+                present_col = cell.column
+                header_row = cell.row
+    return last_col, present_col, header_row
+
+
+def _label_row(ws, snippet, start=15, end=35):
+    needle = re.sub(r'\s+', ' ', snippet).lower()
+    for row in ws.iter_rows(min_row=start, max_row=end, max_col=20):
+        for cell in row:
+            if not isinstance(cell.value, str):
+                continue
+            compact = re.sub(r'\s+', ' ', cell.value).lower()
+            if needle in compact:
+                return cell.row
+    return None
+
+
+def _stored_units(value):
+    if value is None:
+        return None
+    if isinstance(value, float) and abs(value - round(value)) < 1e-6:
+        return int(round(value))
+    return value
+
+
+def _replace_money(text, amount):
+    """Swap the dollar amount and keep the width Citybase padded after $."""
+    if not isinstance(text, str) or '$' not in text:
+        return text
+    match = _MONEY_RE.search(text)
+    if not match:
+        return text
+    number = f'{float(amount):,.2f}'
+    width = len(match.group(0))
+    pad = width - 1 - len(number)
+    if pad < 0:
+        pad = 0
+    replacement = '$' + (' ' * pad) + number
+    return text[:match.start()] + replacement + text[match.end():]
+
+
+def _fit_amount_for_row(ws, row, bill):
+    lines = bill.get('fit_lines') or []
+    if not lines:
+        return abs(float(bill.get('fit_amount') or 0))
+    window = []
+    for col in range(1, (ws.max_column or 1) + 1):
+        value = ws.cell(row, col).value
+        if isinstance(value, str):
+            window.append(value)
+    blob = ' '.join(window)
+    for line in lines:
+        if line['meter'] in blob:
+            return float(line['amount'])
+    if len(lines) == 1:
+        return float(lines[0]['amount'])
+    return None
+
+
+def _update_bill_amount_labels(ws, bill):
+    total = bill.get('total_amount')
+    fit_total = abs(float(bill.get('fit_amount') or 0))
+    for row in ws.iter_rows(min_row=30, max_row=45, max_col=40):
+        for cell in row:
+            if not isinstance(cell.value, str):
+                continue
+            if 'Electricity Bill Amt' in cell.value and total is not None:
+                cell.value = _replace_money(cell.value, float(total))
+            elif 'Feed-in Tariff' in cell.value:
+                amount = _fit_amount_for_row(ws, cell.row, bill)
+                if amount is not None:
+                    cell.value = _replace_money(cell.value, amount)
+            elif 'Actual Electricity' in cell.value and total is not None:
+                cell.value = _replace_money(cell.value, float(total) + fit_total)
+
+
+def _formula_fudge(body):
+    match = re.search(r'([+-]\d+(?:\.\d+)?)\s*$', body)
+    if not match:
+        return 0.0
+    return float(match.group(1))
+
+
+def _format_tail(tail):
+    if abs(tail) < 0.0005:
+        return ''
+    text = f'{tail:.2f}'
+    if not text.startswith('-'):
+        text = '+' + text
+    return text
+
+
+def _centre_key(label):
+    from app.citybase_model import canonical_centre_key
+    text = str(label).replace('Commerical', 'Commercial').replace('commerical', 'commercial')
+    return canonical_centre_key(text)
+
+
+def _update_account_amount_cells(ws, account, allocations):
+    """
+    Keep each centre formula pointed at AC DEPT, and move only the rounding
+    plug so the displayed cents follow this month's allocation.
+    A literal amount (the food-court sheet) is the allocation itself.
+    """
+    by_centre = {}
+    for alloc in allocations:
+        if alloc.get('account') != account:
+            continue
+        key = _centre_key(alloc['centre'])
+        by_centre[key] = by_centre.get(key, 0.0) + float(alloc['amount'])
+    if not by_centre:
+        return
+
+    amount_col = None
+    for row in ws.iter_rows(min_row=30, max_row=45, max_col=70):
+        for cell in row:
+            if isinstance(cell.value, str) and 'AC DEPT' in cell.value:
+                amount_col = cell.column
+                break
+        if amount_col:
+            break
+    if amount_col is None:
+        amount_col = 56
+
+    lines = []
+    for row in range(30, 46):
+        label = ws.cell(row, 4).value
+        if not isinstance(label, str) or not label.strip():
+            continue
+        key = _centre_key(label)
+        if key not in by_centre:
+            continue
+        cell = ws.cell(row, amount_col)
+        lines.append((row, key, cell, by_centre[key]))
+    if not lines:
+        return
+
+    # AC DEPT sometimes drops a cent inside its own formulas. The account
+    # sheet's existing rounding plug puts that cent back so the lines
+    # still add up to the bill (net due, or net due plus FiT).
+    bases = [
+        float(alloc['allocation_base'])
+        for alloc in allocations
+        if alloc.get('account') == account and alloc.get('allocation_base') is not None
+    ]
+    target_total = _excel_round(bases[0] if bases else sum(amount for _, _, _, amount in lines))
+    residual = _excel_round(target_total - sum(_excel_round(amount) for _, _, _, amount in lines))
+    if abs(residual) > 0.05:
+        # A missing centre would dump dollars onto the plug. Leave it.
+        residual = 0.0
+    # Citybase keeps the rounding plug on the DC line of the account.
+    balance_row = None
+    for row, key, cell, _amount in lines:
+        if key == 'DC' and isinstance(cell.value, str) and cell.value.startswith('=ROUND('):
+            balance_row = row
+            break
+
+    for row, _key, cell, amount in lines:
+        if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+            target = _excel_round(amount)
+            cell.value = int(target) if abs(target - round(target)) < 1e-9 else target
+            continue
+        if row != balance_row or not isinstance(cell.value, str):
+            continue
+        match = _ROUND_FORMULA_RE.match(cell.value)
+        if not match:
+            continue
+        target = _excel_round(amount + residual)
+        fudge = _formula_fudge(match.group('body'))
+        tail = _excel_round(target - _excel_round(amount + fudge))
+        cell.value = f"=ROUND({match.group('body')},2){_format_tail(tail)}"
+
+
+def _update_account_sheet(ws, bill):
+    last_col, present_col, header_row = _period_columns(ws)
+    if not last_col or not present_col:
+        logger.warning('Account sheet %s has no Last/Present period columns', ws.title)
+        return
+    units_row = _label_row(ws, 'totally')
+    days_row = _label_row(ws, 'serviced')
+    start, end = _period_dates(bill)
+    if start and end:
+        ws.cell(header_row + 2, last_col).value = start
+        ws.cell(header_row + 2, present_col).value = end
+    if units_row:
+        previous = ws.cell(units_row, present_col).value
+        ws.cell(units_row, last_col).value = _stored_units(previous)
+        present_units = _present_units(bill)
+        if present_units is not None:
+            ws.cell(units_row, present_col).value = present_units
+    if days_row:
+        previous_days = ws.cell(days_row, present_col).value
+        ws.cell(days_row, last_col).value = previous_days
+        present_days = _present_days(bill)
+        if present_days is not None:
+            ws.cell(days_row, present_col).value = present_days
+    _update_bill_amount_labels(ws, bill)
+
+
+def _year_grid_centres(ws, column):
+    from app.citybase_model import canonical_centre_key as key_of
+    centres = {}
+    for row in range(1, 40):
+        label = ws.cell(row, 1).value
+        if not isinstance(label, str) or not label.strip():
+            continue
+        if label.strip().lower().startswith('total'):
+            continue
+        value = ws.cell(row, column).value
+        if isinstance(value, (int, float)):
+            centres[key_of(label)] = float(value)
+    return centres
+
+
+def _defined_number(wb, name):
+    defined = wb.defined_names.get(name)
+    if defined is None:
+        return None
+    try:
+        return float(str(defined.attr_text).lstrip('='))
+    except (TypeError, ValueError):
+        return None
+
+
+def _set_defined_number(wb, name, value):
+    existing = wb.defined_names.get(name)
+    if existing is not None:
+        del wb.defined_names[name]
+    wb.defined_names.add(DefinedName(name=name, attr_text=repr(float(value))))
+
+
+def _cached_check_meter_sw(master_path):
+    if not master_path:
+        return None
+    try:
+        wb = openpyxl.load_workbook(master_path, data_only=True)
+    except Exception:
+        return None
+    try:
+        if 'AC DEPT' not in wb.sheetnames:
+            return None
+        value = wb['AC DEPT']['C7'].value
+        if isinstance(value, (int, float)):
+            return float(value)
+        return None
+    finally:
+        wb.close()
+
+
+def _comparison_sheet(wb):
+    for sheet in wb.worksheets:
+        if sheet.title.strip() == 'Comparison':
+            return sheet
+    return None
+
+
+def _live_comparison_columns(ws):
+    """Previous and current amount columns: the pair sitting left of Difference."""
+    for row in ws.iter_rows(min_row=3, max_row=3, max_col=ws.max_column or 1):
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.strip().lower().startswith('difference'):
+                return cell.column - 2, cell.column - 1
+    return None, None
+
+
+def _update_comparison_sheet(ws, year_grid, billing_month, seawater):
+    previous_col, current_col = _live_comparison_columns(ws)
+    if not previous_col or not current_col:
+        logger.warning('Comparison sheet has no live date pair')
+        return
+    year, month = (int(part) for part in billing_month.split('-'))
+    current_date = datetime(year, month, 1)
+    previous_date = ws.cell(3, current_col).value
+    if not isinstance(previous_date, datetime):
+        previous_month = month - 1 or 12
+        previous_year = year if month > 1 else year - 1
+        previous_date = datetime(previous_year, previous_month, 1)
+    ws.cell(3, previous_col).value = previous_date
+    ws.cell(3, current_col).value = current_date
+
+    previous_month_num = month - 1 or 12
+    centres = _year_grid_centres(year_grid, previous_month_num + 1)
+    if billing_month < _SEAWATER_RECLASS_BEFORE and seawater:
+        if 'AC' in centres and 'SW' in centres:
+            centres['AC'] = centres['AC'] + float(seawater)
+            centres['SW'] = centres['SW'] - float(seawater)
+    from app.citybase_model import canonical_centre_key
+    for row in range(4, 32):
+        label = ws.cell(row, 1).value
+        if not isinstance(label, str) or label.strip().lower().startswith('total'):
+            continue
+        key = canonical_centre_key(label)
+        if key not in centres:
+            continue
+        amount = _excel_round(centres[key])
+        ws.cell(row, previous_col).value = int(amount) if abs(amount - round(amount)) < 1e-9 else amount
+
+
+def _update_cost_sheet_details(
+    wb,
+    allocations,
+    billing_month,
+    parsed_bills,
+    year_grid,
+    previous_seawater,
+    check_meter_sw,
+):
+    bills_by_account = {}
+    for bill in parsed_bills or []:
+        account = bill.get('account')
+        if account:
+            bills_by_account[account] = bill
+    for sheet in wb.worksheets:
+        account = _sheet_account(sheet)
+        if not account or account not in bills_by_account:
+            continue
+        bill = bills_by_account[account]
+        _update_account_sheet(sheet, bill)
+        _update_account_amount_cells(sheet, account, allocations)
+    comparison = _comparison_sheet(wb)
+    if comparison is not None and year_grid is not None:
+        _update_comparison_sheet(comparison, year_grid, billing_month, previous_seawater)
+    if check_meter_sw is not None:
+        _set_defined_number(wb, _CHECK_METER_SW_NAME, check_meter_sw)
 
 
 class WorkbookUpdater:
@@ -288,7 +699,9 @@ class WorkbookUpdater:
         allocations: List[Dict],
         billing_month: str,
         parsed_bills: List[Dict],
-        meter_log: Dict
+        meter_log: Dict,
+        check_meter_sw: Optional[float] = None,
+        master_path: Optional[Path] = None,
     ) -> Path:
         """
         Update Cost Sheet workbook with current month's data.
@@ -393,6 +806,19 @@ class WorkbookUpdater:
                     logger.warning(f"Could not find row for centre {centre}")
         else:
             logger.warning("Could not find year-grid sheet in Cost Sheet")
+
+        previous_seawater = _defined_number(wb, _CHECK_METER_SW_NAME)
+        if previous_seawater is None:
+            previous_seawater = _cached_check_meter_sw(master_path)
+        _update_cost_sheet_details(
+            wb,
+            allocations,
+            billing_month,
+            parsed_bills,
+            year_grid_sheet,
+            previous_seawater,
+            check_meter_sw,
+        )
         
         # Save the updated workbook
         try:
@@ -475,7 +901,9 @@ def process_month_end(
             allocations,
             current_month,
             parsed_bills,
-            meter_log
+            meter_log,
+            check_meter_sw=allocation_result.get('check_meter_sw'),
+            master_path=master_path,
         )
     
     return updated_files
