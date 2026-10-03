@@ -417,19 +417,23 @@ async def upload_bills(files: List[UploadFile] = File(...)):
 
 @app.post("/api/meter-log")
 async def set_meter_log(
-    previous: int = Form(...),
-    present: int = Form(...),
+    previous: float = Form(...),
+    present: float = Form(...),
     read_date: Optional[str] = Form(None),
 ):
     """
     Set meter log for check-meter 6681757 (散熱水泵電).
     
     Args:
-        previous: Previous reading (integer)
-        present: Present reading (integer, must be >= previous)
+        previous: Previous reading (float, up to 1 decimal place)
+        present: Present reading (float, up to 1 decimal place, must be >= previous)
         read_date: Optional read date (YYYY-MM-DD or DD-MM-YY)
     """
     try:
+        # Round to 1 decimal place
+        previous = round(previous, 1)
+        present = round(present, 1)
+        
         if present < previous:
             raise HTTPException(400, "Present reading must be >= previous reading")
         
@@ -440,10 +444,13 @@ async def set_meter_log(
         # Validate gate after update
         gate = validate_gate()
         
+        # Calculate delta with 1 decimal precision
+        delta = round(present - previous, 1)
+        
         return {
             "success": True,
             "meter_log": session_storage['meter_log'],
-            "delta": present - previous,
+            "delta": delta,
             "gate_status": gate,
         }
     
@@ -481,7 +488,7 @@ async def download_meter_log():
         
         # Data
         ml = session_storage['meter_log']
-        delta = ml['present'] - ml['previous'] if ml['present'] and ml['previous'] else None
+        delta = round(ml['present'] - ml['previous'], 1) if ml['present'] and ml['previous'] else None
         ws1.append([
             ml['meter_no'],
             ml['label'],

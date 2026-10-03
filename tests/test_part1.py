@@ -98,25 +98,25 @@ class TestMeterLog:
     
     def test_meter_log_incomplete_missing_present(self, reset_session):
         """Test meter log incomplete when missing present"""
-        session_storage['meter_log']['previous'] = 1000000
+        session_storage['meter_log']['previous'] = 1000000.0
         assert is_meter_log_complete() is False
     
     def test_meter_log_invalid_present_less_than_previous(self, reset_session):
         """Test meter log invalid when present < previous"""
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 999999
+        session_storage['meter_log']['previous'] = 1000000.5
+        session_storage['meter_log']['present'] = 999999.3
         assert is_meter_log_complete() is False
     
     def test_meter_log_complete_valid(self, reset_session):
         """Test meter log complete when valid"""
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.5
         assert is_meter_log_complete() is True
     
     def test_meter_log_complete_equal_readings(self, reset_session):
         """Test meter log complete when present = previous (edge case)"""
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1000000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1000000.0
         assert is_meter_log_complete() is True
 
 
@@ -139,8 +139,8 @@ class TestGateValidation:
     def test_gate_pass_all_15_accounts(self, reset_session):
         """Test gate passes with all 15 expected accounts"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add all 15 expected accounts
         for account in EXPECTED_ACCOUNTS:
@@ -156,8 +156,8 @@ class TestGateValidation:
     def test_gate_fail_missing_account(self, reset_session):
         """Test gate fails when missing an account"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add only 14 accounts (missing one)
         for account in EXPECTED_ACCOUNTS[:-1]:  # Skip last account
@@ -173,8 +173,8 @@ class TestGateValidation:
     def test_gate_fail_duplicate_account(self, reset_session):
         """Test gate fails when duplicate account exists"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add all 15 accounts
         for account in EXPECTED_ACCOUNTS:
@@ -193,8 +193,8 @@ class TestGateValidation:
     def test_gate_fail_wrong_month(self, reset_session):
         """Test gate fails when bill from wrong month"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add 14 correct accounts (period ends in April)
         for account in EXPECTED_ACCOUNTS[:-1]:
@@ -213,8 +213,8 @@ class TestGateValidation:
     def test_gate_warn_unrecognised_account(self, reset_session):
         """Test gate fails on unrecognised account (not in Metropolis 15)"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add all 15 expected accounts
         for account in EXPECTED_ACCOUNTS:
@@ -246,8 +246,8 @@ class TestAccountChecklist:
     def test_checklist_all_matched(self, reset_session):
         """Test checklist when all accounts matched"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         for account in EXPECTED_ACCOUNTS:
             bill = create_mock_bill(account, from_date='15-04-25', kwh=10000)
@@ -260,8 +260,8 @@ class TestAccountChecklist:
     def test_checklist_mixed_statuses(self, reset_session):
         """Test checklist with mixed statuses"""
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add first 10 accounts (matched, period ends in April)
         for account in EXPECTED_ACCOUNTS[:10]:
@@ -350,8 +350,8 @@ class TestBugRegressions:
         Example: Period 24-03-25 to 23-04-25 should be April 2025, not March 2025.
         """
         session_storage['billing_month'] = '2025-04'
-        session_storage['meter_log']['previous'] = 1000000
-        session_storage['meter_log']['present'] = 1001000
+        session_storage['meter_log']['previous'] = 1000000.0
+        session_storage['meter_log']['present'] = 1001000.0
         
         # Add bills that start in March but end in April
         # These should be classified as April bills
@@ -383,6 +383,32 @@ class TestBugRegressions:
         bill2 = create_mock_bill('72399-00664-9', from_date='24-02-25', to_date='23-03-25')
         month2 = extract_bill_month(bill2)
         assert month2 == '2025-03', f"Expected 2025-03 (period end), got {month2}"
+    
+    def test_meter_log_accepts_one_decimal_place(self, reset_session):
+        """
+        Regression test: Meter readings should accept one decimal place.
+        
+        Real April 2025 meter 6681757 readings:
+        - Previous: 95966.6
+        - Present: 96323.1
+        - Expected delta: 356.5 (not 357)
+        """
+        session_storage['billing_month'] = '2025-04'
+        
+        # Set meter log with real April 2025 values (one decimal place)
+        session_storage['meter_log']['previous'] = 95966.6
+        session_storage['meter_log']['present'] = 96323.1
+        
+        # Verify meter log is complete
+        assert is_meter_log_complete() is True
+        
+        # Calculate delta with 1 decimal precision
+        delta = round(session_storage['meter_log']['present'] - session_storage['meter_log']['previous'], 1)
+        assert delta == 356.5, f"Expected delta 356.5, got {delta}"
+        
+        # Verify values are stored with correct precision
+        assert session_storage['meter_log']['previous'] == 95966.6
+        assert session_storage['meter_log']['present'] == 96323.1
 
 
 if __name__ == '__main__':
