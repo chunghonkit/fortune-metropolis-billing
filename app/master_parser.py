@@ -400,23 +400,26 @@ class MasterWorkbookParser:
             "AC - Commercial Air Conditioning" -> "AC"
             "SW - Sea Water Pump House" -> "SW"
             "C - Commercial" -> "C"
+            "OC -Office Common" -> "OC" (handle missing space)
+            "Commercial Common" -> "C"
             "Hotel / Commercial / SA" -> "C/SA" (Hotel not a valid code, extract C and SA)
             "SA / Commercial" -> "SA/C"
             "Hotel / Commercial" -> "C"
         
         Strategy:
-        1. If format is "CODE - Description", extract CODE
+        1. If format is "CODE - Description" or "CODE -Description", extract CODE
         2. If format has slashes, extract all known codes from segments
-        3. Return extracted code(s) joined with "/" or original if no match
+        3. If no code prefix, check for known keywords (Commercial -> C, Office -> O, etc.)
+        4. Return extracted code(s) joined with "/" or original if no match
         
         Known codes: AC, AO, C, CP, DC, FC, O, OC, SA, SW
         """
         # Known centre codes
         KNOWN_CODES = {'AC', 'AO', 'C', 'CP', 'DC', 'FC', 'O', 'OC', 'SA', 'SW'}
         
-        # Try "CODE - Description" format first
-        if ' - ' in centre_full:
-            code = centre_full.split(' - ')[0].strip()
+        # Try "CODE - Description" or "CODE -Description" format first (handle missing space)
+        if ' -' in centre_full:
+            code = centre_full.split(' -')[0].strip()
             if code in KNOWN_CODES or len(code) <= 3:
                 return code
         
@@ -441,6 +444,15 @@ class MasterWorkbookParser:
             
             if matched_codes:
                 return '/'.join(matched_codes)
+        
+        # Check for known keywords without code prefix
+        centre_lower = centre_full.lower()
+        if 'commercial' in centre_lower and 'air' not in centre_lower:
+            return 'C'
+        elif 'office' in centre_lower and 'accommodation' not in centre_lower:
+            return 'OC'  # "Office Common" -> OC
+        elif 'carpark' in centre_lower or 'car park' in centre_lower:
+            return 'CP'
         
         # Return as-is if no extraction worked
         return centre_full
