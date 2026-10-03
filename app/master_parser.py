@@ -158,10 +158,10 @@ class MasterWorkbookParser:
         for idx, h in enumerate(headers):
             if idx == account_col_idx:
                 continue
-            # Check if this looks like a cost centre column
-            if any(cc in h.upper() for cc in ['FC', 'SW', 'AC', 'DC', 'OC', 'AO', 'CP', 'SA']):
-                centre_cols.append((idx, h))
-            elif 'centre' in h.lower() or 'center' in h.lower():
+            # Include ALL non-account columns as potential cost centres
+            # This handles both simple codes (AC, FC, SW, C, DC, OC, AO, CP, SA)
+            # and complex descriptions (Hotel/Commercial/SA (11), etc.)
+            if h and h.strip():  # Any non-empty header
                 centre_cols.append((idx, h))
         
         # Parse data rows
@@ -360,10 +360,9 @@ class MasterWorkbookParser:
         for col in df.columns:
             if col == account_col:
                 continue
-            col_str = str(col).upper()
-            if any(cc in col_str for cc in ['FC', 'SW', 'AC', 'DC', 'OC', 'AO', 'CP', 'SA']):
-                centre_cols.append(col)
-            elif 'centre' in str(col).lower() or 'center' in str(col).lower():
+            # Include ALL non-account columns as potential cost centres
+            col_str = str(col).strip()
+            if col_str and col_str.lower() not in ['account', 'meter', 'acct', 'a/c', 'account/meter']:
                 centre_cols.append(col)
         
         # Parse rows

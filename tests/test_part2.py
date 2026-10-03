@@ -472,6 +472,68 @@ class TestWorkbookValueUpdates:
             
             wb_updated.close()
     
+    def test_current_reading_header_regression(self):
+        """
+        Regression test: Real Citybase workbook uses "Current Reading" not "Present".
+        
+        May rerun showed meter found but readings not written because header 
+        matching only looked for "Present", not "Current Reading".
+        """
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create Elect Charge sheet with "Current Reading" header (real Citybase format)
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            elect_sheet = wb.create_sheet("Elect Charge")
+            
+            # Meter 6681757 at row 31, columns BR/BS (70/71)
+            elect_sheet.cell(row=31, column=1).value = '6681757'
+            elect_sheet.cell(row=31, column=70).value = 95966.6   # BR31 - Previous (April)
+            elect_sheet.cell(row=31, column=71).value = 96323.1   # BS31 - Current (April)
+            elect_sheet.cell(row=31, column=69).value = '=BS31-BR31'
+            
+            # Real Citybase headers in row 30
+            elect_sheet.cell(row=30, column=70).value = 'Previous Reading'
+            elect_sheet.cell(row=30, column=71).value = 'Current Reading'  # Not "Present"!
+            elect_sheet.cell(row=30, column=69).value = 'Difference'
+            
+            wb_file = out_dir / 'Cost Allocation.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Update with May readings
+            meter_log = {
+                'meter_no': '6681757',
+                'previous': 96323.1,
+                'present': 96504.6,
+            }
+            
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_allocation_workbook(
+                wb_file,
+                allocations=[],
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log=meter_log
+            )
+            
+            # Verify readings updated despite "Current Reading" header
+            wb_updated = openpyxl.load_workbook(wb_file)
+            elect_sheet_updated = wb_updated['Elect Charge']
+            
+            assert elect_sheet_updated.cell(row=31, column=70).value == 96323.1, \
+                f"BR31 Previous should be 96323.1, got {elect_sheet_updated.cell(row=31, column=70).value}"
+            assert elect_sheet_updated.cell(row=31, column=71).value == 96504.6, \
+                f"BS31 Current Reading should be 96504.6, got {elect_sheet_updated.cell(row=31, column=71).value}"
+            
+            wb_updated.close()
+    
     def test_year_grid_matches_billing_year_regression(self):
         """
         Regression test: Year-grid sheet must match billing year.
@@ -591,6 +653,80 @@ class TestWorkbookValueUpdates:
                 f"AC DEPT A1 should preserve original title, got {wb_updated['AC DEPT']['A1'].value}"
             assert wb_updated['Elect Charge']['A1'].value == 'Electricity Charges - Original Title', \
                 f"Elect Charge A1 should preserve original title, got {wb_updated['Elect Charge']['A1'].value}"
+            
+            wb_updated.close()
+    
+    def test_complex_centre_names_aggregate_correctly(self):
+        """
+        Regression test: Complex centre names must aggregate to simple codes.
+        
+        Master workbook has centres like "Hotel/Commercial/SA (11)" which must
+        aggregate to "SA" row in Cost Sheet year-grid.
+        """
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create Cost Sheet with year-grid
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            grid_sheet = wb.create_sheet("01-12 2025")
+            grid_sheet['A1'] = 'Cost Centre'
+            grid_sheet['F1'] = 'May'
+            grid_sheet['A2'] = 'AC'
+            grid_sheet['A3'] = 'SA'
+            grid_sheet['A4'] = 'C'
+            grid_sheet['A5'] = 'DC'
+            
+            wb_file = out_dir / 'Cost Sheet-2025-05.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Allocations with complex centre names (like real master produces)
+            allocations = [
+                {'centre': 'AC', 'amount': 10388.15, 'account': 'test1'},
+                {'centre': 'C', 'amount': 62705.08, 'account': 'test1'},
+                {'centre': 'DC', 'amount': 23428.44, 'account': 'test1'},
+                {'centre': 'Hotel/Commercial/SA (11)', 'amount': 421.15, 'account': 'test1'},  # Should -> SA
+                {'centre': 'Hotel/SA (13)', 'amount': 805.38, 'account': 'test1'},            # Should -> SA
+                {'centre': 'SA/Commercial (16)', 'amount': 731.04, 'account': 'test1'},       # Should -> SA
+            ]
+            
+            # Update workbook
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_sheet_workbook(
+                wb_file,
+                allocations=allocations,
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log={}
+            )
+            
+            # Verify complex names aggregated correctly
+            wb_updated = openpyxl.load_workbook(wb_file)
+            grid_sheet_updated = wb_updated['01-12 2025']
+            
+            # AC should have its simple allocation
+            assert grid_sheet_updated['F2'].value == 10388.15, \
+                f"AC should be 10388.15, got {grid_sheet_updated['F2'].value}"
+            
+            # SA should have sum of all SA-related allocations
+            expected_sa = 421.15 + 805.38 + 731.04  # = 1957.57
+            assert abs(grid_sheet_updated['F3'].value - expected_sa) < 0.01, \
+                f"SA should be {expected_sa}, got {grid_sheet_updated['F3'].value}"
+            
+            # C should have its simple allocation
+            assert grid_sheet_updated['F4'].value == 62705.08, \
+                f"C should be 62705.08, got {grid_sheet_updated['F4'].value}"
+            
+            # DC should have its simple allocation
+            assert grid_sheet_updated['F5'].value == 23428.44, \
+                f"DC should be 23428.44, got {grid_sheet_updated['F5'].value}"
             
             wb_updated.close()
 

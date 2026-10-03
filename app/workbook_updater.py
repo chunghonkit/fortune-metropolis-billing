@@ -30,6 +30,60 @@ class WorkbookUpdater:
     def __init__(self, metropolis_root: Path):
         self.metropolis_root = Path(metropolis_root).expanduser()
     
+    def _extract_primary_centre_code(self, centre_name: str) -> str:
+        """
+        Extract primary centre code from complex centre names.
+        
+        Examples:
+            "AC" -> "AC"
+            "FC" -> "FC"
+            "C" -> "C"
+            "Hotel/Commercial/SA (11)" -> "SA"
+            "Commercial/Office/SA (7)" -> "SA"
+            "SA/Commercial (16)" -> "SA"
+            "Hotel / Carpark(9)" -> fallback to "Carpark"
+            "Commercial" -> "Commercial"
+        
+        Strategy:
+        1. If it's already a simple 1-2 letter uppercase code, return as-is
+        2. Remove parenthetical reference numbers like "(11)"
+        3. Look for known simple centre codes (AC, AO, C, CP, DC, FC, O, OC, SA, SW) in segments
+        4. If found, return the first matching code
+        5. Otherwise extract last segment from slashes
+        """
+        centre_name = centre_name.strip()
+        
+        # Simple codes (1-2 uppercase letters) - return as-is
+        if len(centre_name) <= 2 and centre_name.isupper():
+            return centre_name
+        
+        # Check for parenthetical reference numbers like "(11)"
+        # Extract the text before the parenthesis
+        if '(' in centre_name:
+            # "Hotel/Commercial/SA (11)" -> "Hotel/Commercial/SA"
+            centre_name = centre_name.split('(')[0].strip()
+        
+        # Known simple centre codes
+        SIMPLE_CODES = ['AC', 'AO', 'C', 'CP', 'DC', 'FC', 'O', 'OC', 'SA', 'SW']
+        
+        # Check if any known code appears in the centre name
+        if '/' in centre_name:
+            # Split into segments and check each
+            segments = [s.strip() for s in centre_name.split('/') if s.strip()]
+            for segment in segments:
+                if segment.upper() in SIMPLE_CODES:
+                    return segment.upper()
+            # If no simple code found, return last segment
+            if segments:
+                return segments[-1]
+        
+        # No slashes - check if it's a known code
+        if centre_name.upper() in SIMPLE_CODES:
+            return centre_name.upper()
+        
+        # Return as-is for other cases (Commercial, Carpark, etc.)
+        return centre_name
+    
     def copy_previous_month_workbooks(
         self,
         current_month: str,  # YYYY-MM
@@ -219,7 +273,7 @@ class WorkbookUpdater:
                 # BQ=69, BR=70, BS=71 (0-indexed: 68, 69, 70)
                 # But let's search for "Previous" and "Present" headers first
                 
-                # Search for column headers in row above meter or in header row
+                # Search for column headers in row above meter or in header row - search ALL columns
                 prev_col = None
                 present_col = None
                 delta_col = None
@@ -234,12 +288,15 @@ class WorkbookUpdater:
                     for cell in row_cells:
                         if cell.value:
                             val_lower = str(cell.value).lower()
+                            # Match: "Previous", "Prev", "上期"
                             if 'previous' in val_lower or 'prev' in val_lower or '上期' in val_lower:
                                 prev_col = cell.column
                                 logger.info(f"Found Previous column: {openpyxl.utils.get_column_letter(prev_col)}")
-                            elif 'present' in val_lower or '今期' in val_lower:
+                            # Match: "Present", "Current", "Current Reading", "今期"
+                            elif 'present' in val_lower or 'current' in val_lower or '今期' in val_lower:
                                 present_col = cell.column
-                                logger.info(f"Found Present column: {openpyxl.utils.get_column_letter(present_col)}")
+                                logger.info(f"Found Present/Current column: {openpyxl.utils.get_column_letter(present_col)}")
+                            # Match: "Delta", "Diff", "Difference", "度數"
                             elif 'delta' in val_lower or 'diff' in val_lower or '度數' in val_lower:
                                 delta_col = cell.column
                                 logger.info(f"Found Delta column: {openpyxl.utils.get_column_letter(delta_col)}")
@@ -353,11 +410,26 @@ class WorkbookUpdater:
             logger.info(f"Writing to month column {month_col_letter} (month {month_num})")
             
             # Calculate total allocation per cost centre
+            # Map complex centre names to simple codes (AC, FC, SW, DC, etc.)
             centre_totals = {}
             for alloc in allocations:
-                centre = alloc['centre']
+                centre_raw = alloc['centre']
                 amount = alloc['amount']
+                
+                # Extract primary centre code from complex names
+                # Examples:
+                #   "AC" -> "AC"
+                #   "Hotel/Commercial/SA (11)" -> "SA"
+                #   "Commercial/Office/SA (7)" -> "SA"
+                #   "C" -> "C"
+                centre = self._extract_primary_centre_code(centre_raw)
+                
                 centre_totals[centre] = centre_totals.get(centre, 0) + amount
+            
+            logger.info(f"Aggregated allocation totals by centre: {centre_totals}")
+            
+            if not centre_totals:
+                logger.warning("No allocation totals to write - allocations list may be empty or invalid")
             
             # Find rows for each cost centre by searching column A for centre names
             # Common centres: FC, AC, SW, DC, OC, AO, CP, SA, C
