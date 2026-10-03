@@ -51,6 +51,77 @@ def test_space_separated_register_row_is_not_read_as_meter_ids():
     assert 1 not in found.values()
 
 
+def test_fit_factor_column_is_kept_for_the_retail_split():
+    """
+    Renewable meters print FiT in the factor column. Dropping them
+    overweights the 9133719 / 10220967 line (Commercial) and underweights
+    the Hotel/Commercial and Hotel/SA lines.
+    """
+    text = """
+    9133719 / 20000000 / 19911471 / 1 / 88529
+    10220967 / 8003190 / 8000000 / 1 / 3190
+    9134412 / 3000000 / 2974497 / 1 / 25503
+    9115936 / 5004808 / 5000000 / FiT / 4,808
+    9144186 / 9000000 / 8956505.50 / 1 / 43494.50
+    9144880 7000000 6989517 FiT 10483
+    10353005 / 5002141 / 5000000 / 1 / 2141
+    """
+    found = _by_meter(text)
+    assert found['9115936'] == 4808
+    assert found['9144880'] == 10483
+    assert found['9133719'] == 88529
+    assert found['10220967'] == 3190
+
+    bills = [{
+        'account': '52167-13569-2',
+        'total_amount': 100000,
+        'fit_amount': -20000,
+        'meters': _extract_meter_consumptions(text),
+    }]
+    result = CitybaseModel(str(MASTER)).allocate(
+        bills, {'meter_no': '6681757', 'previous': 96323.1, 'present': 96504.6}
+    )
+    centres = {a['centre']: a['amount'] for a in result['allocations']
+               if a['account'] == '52167-13569-2'}
+    assert abs(sum(centres.values()) - 120000) < 0.05
+    # Group 9 (9134412 + 9115936) feeds Hotel / Commercial. Group 8 does not.
+    assert centres['Hotel / Commercial'] > 0
+    assert centres['Hotel / SA'] > 0
+    assert centres['SA / Commercial'] > 0
+
+
+def test_may_chiller_units_still_set_o7():
+    """The deployed May chiller read must stay on the same O7."""
+    text = """
+    9048406 18000000 17936220 1 63780
+    9026169 15000000 14914242 1 85758
+    9024222 24570099 24439330 1 130769
+    9026183 10050784 10000000 1 50784
+    """
+    meters = _extract_meter_consumptions(text)
+    by_meter = {m['meter_no']: m['consumption'] for m in meters}
+    assert by_meter == {
+        '9048406': 63780,
+        '9026169': 85758,
+        '9024222': 130769,
+        '9026183': 50784,
+    }
+    bills = [{
+        'account': '55861-52267-1',
+        'total_amount': 500000,
+        'meters': meters,
+    }]
+    result = CitybaseModel(str(MASTER)).allocate(
+        bills, {'meter_no': '6681757', 'previous': 96323.1, 'present': 96504.6}
+    )
+    ac = sum(a['amount'] for a in result['allocations']
+             if a['account'] == '55861-52267-1' and a['centre'] == 'AC')
+    sw = sum(a['amount'] for a in result['allocations']
+             if a['account'] == '55861-52267-1' and a['centre'] == 'SW')
+    assert abs(sw / (ac + sw) - 0.241094) < 0.00005
+    assert abs(ac / (ac + sw) - 0.758906) < 0.00005
+
+
 def test_decimal_and_fullwidth_slash_rows():
     decimal = _by_meter('9024222 / 24570099.00 / 24439330.00 / 1 / 130769.00')
     assert decimal['9024222'] == 130769

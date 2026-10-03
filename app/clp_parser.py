@@ -57,12 +57,14 @@ _UNITS_LINE = re.compile(_METER + r'(?:\s+' + _FIT + r')?' + r'\s+' + _UNITS)
 # meter, present, previous, factor, units. The last field is the kWh.
 _ROW_SEP = r'(?:\s*/\s*|\s+)'
 _ROW_READING = r'((?:\d{1,3}(?:,\d{3})+|\d{6,9})(?:\.\d+)?)'
+# The factor column is a number, or the word FiT on a renewable meter.
+# 9115936 / 5004808 / 5000000 / FiT / 4,808
 _METER_ROW = re.compile(
     r'(?<!\d)(\d{7,8})(?!\d)'
     + _ROW_SEP + _ROW_READING
     + _ROW_SEP + _ROW_READING
-    + _ROW_SEP + r'(\d{1,3}(?:\.\d+)?)'
-    + _ROW_SEP + r'(?:' + _FIT + r'\s+)?'
+    + _ROW_SEP + r'(\d{1,3}(?:\.\d+)?|' + _FIT + r')'
+    + _ROW_SEP + r'(' + _FIT + r'\s+)?'
     + r'((?:\d{1,3}(?:,\d{3})+|\d{1,7})(?:\.\d+)?)(?!\d)'
 )
 _TOKEN = re.compile(
@@ -200,20 +202,25 @@ def _extract_meter_consumptions(text):
     consumed = []
 
     for match in _METER_ROW.finditer(text):
-        meter_no, first_s, second_s, factor_s, units_s = match.groups()
+        meter_no, first_s, second_s, factor_s, fit_tag, units_s = match.groups()
+        fit_factor = factor_s.lower() == 'fit' or bool(fit_tag)
         try:
             first = _number(first_s)
             second = _number(second_s)
-            factor_value = _number(factor_s)
             units = _number(units_s)
+            factor_value = 1 if fit_factor else _number(factor_s)
         except ValueError:
             continue
         if factor_value < 1 or factor_value > 100 or factor_value != int(factor_value):
             continue
         factor = int(factor_value)
-        delta = abs(first - second) * factor
-        if abs(delta - units) > 1:
-            continue
+        # A numeric factor is a register row: units must be |present−previous|×factor.
+        # FiT in that column is the renewable flag; the units field is the kWh
+        # even when it is not the register difference.
+        if not fit_factor:
+            delta = abs(first - second) * factor
+            if abs(delta - units) > 1:
+                continue
         present, previous = (first, second) if first >= second else (second, first)
         if _append_meter(meters, seen, meter_no, units, factor, previous, present):
             consumed.append(match.span())

@@ -535,6 +535,11 @@ class CitybaseModel:
                     f'(meters seen: {sorted(kwh_by_meter)})'
                 )
                 return
+            logger.info(
+                '%s %s kWh by elect row: %s',
+                account, label,
+                [(elect_row, str(weight)) for elect_row, weight in weights],
+            )
             # Match the master: every line except the first is rounded to 3 d.p.,
             # and the first line is the residual so the parts sum to the bill.
             residual_row = weights[0][0]
