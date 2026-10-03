@@ -445,6 +445,11 @@ class CitybaseModel:
             elect_row = line['elect_row']
             charge = elect.get(elect_row, Decimal(0))
             alloc_d[row] = charge * alloc_o.get(row, Decimal(0))
+        check_meter_sw = sum(
+            (alloc_d.get(row, Decimal(0)) for row, line in self.alloc_lines.items()
+             if line['kind'] == 'check_sw'),
+            Decimal(0),
+        )
 
         evaluator = _FormulaEvaluator(alloc_d, alloc_o, self.n_raw, self.c_raw)
         grouped: Dict[Tuple[str, str], Decimal] = {}
@@ -489,6 +494,7 @@ class CitybaseModel:
         return {
             'allocations': allocations,
             'summary': summary,
+            'check_meter_sw': float(check_meter_sw),
             'validation': {'errors': warnings, 'residual_ok': not warnings},
         }
 
