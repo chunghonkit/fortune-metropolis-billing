@@ -221,13 +221,17 @@ class AllocationEngine:
             return [{'centre': 'FC', 'percentage': 1.0}]
         
         # SPECIAL RULE: Retail chillers 55861-52267-1 AC/SW split from check-meter 6681757
+        # DISABLED: Complex Citybase formula requires Elect Charge sheet data we don't have access to
+        # Formula involves: (check_delta × 160) / Elect_Charge_meter_9024222_kWh for one meter,
+        # then combining with other meters. We don't have meter-level kWh breakdown.
+        # For now, use April master percentages (about 77.82% AC / 22.18% SW from Column C charges)
         if account == self.SPECIAL_AC_SW_ACCOUNT:
-            check_meter_split = self._compute_check_meter_split(bill)
-            if check_meter_split:
-                logger.info(f"Account {account}: Using live check-meter split: {check_meter_split}")
-                return check_meter_split
+            # Try to use master percentages if available
+            if account in self.allocation_rules:
+                logger.info(f"Account {account}: Using April master AC/SW split from AC DEPT Column C")
+                return self.allocation_rules[account]
             else:
-                logger.warning(f"Account {account}: Could not compute check-meter split, falling back to master")
+                logger.warning(f"Account {account}: No master percentages, cannot compute AC/SW split")
         
         # HARDCODED RULE: Office chillers AO 92% / OC 8%
         # These accounts are in the Allocation sheet by meter, but if the CLP parser

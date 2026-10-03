@@ -280,6 +280,21 @@ class MasterWorkbookParser:
                 })
                 logger.debug(f"Row {row_idx}: meter {current_meter}, centre {centre_code} ({centre_full}), pct {pct:.4f}")
         
+        # CRITICAL: Normalize percentages for each meter to sum to 1.0
+        # The Allocation sheet has percentages that can sum to >1.0 due to
+        # multiple allocation scenarios or merged cell errors
+        for meter, entries in allocations.items():
+            total_pct = sum(e['percentage'] for e in entries)
+            if total_pct == 0:
+                logger.warning(f"Meter {meter} has zero total percentage, skipping")
+                continue
+            
+            if abs(total_pct - 1.0) > 0.01:
+                logger.warning(f"Meter {meter} percentages sum to {total_pct:.4f}, normalizing to 1.0")
+                # Normalize
+                for entry in entries:
+                    entry['percentage'] /= total_pct
+        
         logger.info(f"Parsed {len(allocations)} meters from Allocation sheet")
         return allocations
     
@@ -294,25 +309,27 @@ class MasterWorkbookParser:
         Actual structure (verified from real April workbook):
         - Row 3: Headers
         - Column A: "Elect. Meter No.:" - Account/meter (only on first row of group)
-        - Columns B-M: Monthly charges (formulas/numbers - NOT weights!)
-        - Column N: "Percentage:" - The actual percentages (already computed!)
+        - Columns B-M: Monthly charges (e.g. Column C "May-08 Charge")  
+        - Column N: "Percentage:" - formulas pointing to OLD month (Jun-06), NOT current!
         - Column O: "Allocated Cost Centre:" - Centre names (long form)
         
-        Example:
-            Row 73: A="55861-52267-1 (A)", N=0.848169931, O="AC - Commercial Air Conditioning"
-            Row 74: A="",                  N=0.151830069, O="SW - Sea Water Pump House"
+        Example April values:
+            Row 73: A="55861-52267-1 (A)", C=287864.81, O="AC - Commercial Air Conditioning"
+            Row 74: A="",                  C=82049.19,  O="SW - Sea Water Pump House"
+            → AC: 287864.81 / 369914.0 = 77.82%, SW: 22.18%
         
         Key insights:
         - Account in column A only on first row of group; subsequent rows blank
-        - Percentages ALREADY COMPUTED in column N (not weights to compute from!)
+        - Column C has CHARGE amounts to use as weights (compute percentages from them)
+        - Column N percentages point to old month - DO NOT USE
         - Centre in column O as "AC - Commercial Air Conditioning" (extract "AC" code)
-        - Column C is charges (numeric) - must NOT be used as centre!
         
         Strategy:
-        1. Find "Percentage:" and "Allocated Cost Centre:" columns by header
-        2. Track current account (persists across rows until new account found)
-        3. Extract short code from centre name ("AC" from "AC - Commercial...")
-        4. Use percentage from column N directly
+        1. Find account and centre columns by header
+        2. Find a charge column (columns B-M, look for "Charge" in header)
+        3. Track current account (persists across rows until new account found)
+        4. Extract short code from centre name ("AC" from "AC - Commercial...")
+        5. Compute percentages from charge weights (weight / Σ per account group)
         """
         allocations = {}
         
