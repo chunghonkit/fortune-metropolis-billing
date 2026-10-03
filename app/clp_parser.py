@@ -50,18 +50,20 @@ _READING_LINE = re.compile(
 _FIT = r'[Ff][Ii][Tt]'
 _UNITS = r'(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{1,6})(?!\d)'
 _UNITS_LINE = re.compile(_METER + r'(?:\s+' + _FIT + r')?' + r'\s+' + _UNITS)
-# Bulk meter table, as printed on 55861:
+# Bulk meter table on 55861. Fields are adjacent, separated by a slash
+# or by whitespace (PyMuPDF often drops the printed slash):
 #   9024222 / 24570099 / 24439330 / 1 / 130769
-# meter / present / previous / factor / units. The last field is the kWh.
-_SLASH_SEP = r'\s*/\s*'
-_SLASH_READING = r'(\d{1,3}(?:,\d{3})+|\d{6,9})'
-_SLASH_METER = re.compile(
+#   9024222 24570099 24439330 1 130769
+# meter, present, previous, factor, units. The last field is the kWh.
+_ROW_SEP = r'(?:\s*/\s*|\s+)'
+_ROW_READING = r'((?:\d{1,3}(?:,\d{3})+|\d{6,9})(?:\.\d+)?)'
+_METER_ROW = re.compile(
     r'(?<!\d)(\d{7,8})(?!\d)'
-    + _SLASH_SEP + _SLASH_READING
-    + _SLASH_SEP + _SLASH_READING
-    + _SLASH_SEP + r'(\d{1,3})'
-    + _SLASH_SEP + r'(?:' + _FIT + r'\s+)?'
-    + r'(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,7}(?:\.\d+)?)(?!\d)'
+    + _ROW_SEP + _ROW_READING
+    + _ROW_SEP + _ROW_READING
+    + _ROW_SEP + r'(\d{1,3}(?:\.\d+)?)'
+    + _ROW_SEP + r'(?:' + _FIT + r'\s+)?'
+    + r'((?:\d{1,3}(?:,\d{3})+|\d{1,7})(?:\.\d+)?)(?!\d)'
 )
 _TOKEN = re.compile(
     r'(?<!\d)(?P<meter>\d{7,8})(?!\d)'
@@ -71,12 +73,15 @@ _TOKEN = re.compile(
 
 
 def _normalize_bill_text(text):
-    return (text.replace('\u00a0', ' ')
+    text = (text.replace('\u00a0', ' ')
                 .replace('\u3000', ' ')
                 .replace('，', ',')
                 .replace('．', '.')
                 .replace('−', '-')
                 .replace('–', '-'))
+    for slash in ('／', '∕', '⁄', '╱'):
+        text = text.replace(slash, '/')
+    return text
 
 
 def _number(token):
@@ -194,17 +199,18 @@ def _extract_meter_consumptions(text):
     seen = set()
     consumed = []
 
-    for match in _SLASH_METER.finditer(text):
+    for match in _METER_ROW.finditer(text):
         meter_no, first_s, second_s, factor_s, units_s = match.groups()
         try:
             first = _number(first_s)
             second = _number(second_s)
-            factor = int(factor_s)
+            factor_value = _number(factor_s)
             units = _number(units_s)
         except ValueError:
             continue
-        if factor < 1 or factor > 100:
+        if factor_value < 1 or factor_value > 100 or factor_value != int(factor_value):
             continue
+        factor = int(factor_value)
         delta = abs(first - second) * factor
         if abs(delta - units) > 1:
             continue

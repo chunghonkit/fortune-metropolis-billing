@@ -25,6 +25,39 @@ def _by_meter(text):
     return {meter['meter_no']: meter['consumption'] for meter in _extract_meter_consumptions(text)}
 
 
+def test_space_separated_register_row_is_not_read_as_meter_ids():
+    """
+    Fitz often emits the 55861 table without the printed slashes.
+    The factor must not become kWh, and the readings must not become meters.
+    """
+    text = """
+    Meter No. / Present Reading / Previous Reading / Multi Factor / Consumption
+    9048406 23012214 22948434 1 63780
+    9026169 18000000 17900000 1 100000
+    9024222 24570099 24439330 1 130769
+    9026183 10001000 10000000 1 1000
+    Grand Total Units Consumed 331,091
+    """
+    found = _by_meter(text)
+    assert found['9024222'] == 130769
+    assert found['9048406'] == 63780
+    assert found['9026169'] == 100000
+    assert found['9026183'] == 1000
+    assert '23012214' not in found
+    assert '22948434' not in found
+    assert '24570099' not in found
+    assert '24439330' not in found
+    assert 331091 not in found.values()
+    assert 1 not in found.values()
+
+
+def test_decimal_and_fullwidth_slash_rows():
+    decimal = _by_meter('9024222 / 24570099.00 / 24439330.00 / 1 / 130769.00')
+    assert decimal['9024222'] == 130769
+    wide = _by_meter('9024222 ／ 24,570,099 ／ 24,439,330 ／ 1 ／ 130,769')
+    assert wide['9024222'] == 130769
+
+
 def test_slash_meter_row_finishes_and_uses_the_units_field():
     """55861 prints 9024222 / present / previous / factor / units."""
     line = '9024222 / 24570099 / 24439330 / 1 / 130769'

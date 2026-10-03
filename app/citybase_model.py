@@ -432,7 +432,11 @@ class CitybaseModel:
                 'Check meter split needs dial delta and kWh of private meter 9024222 '
                 '(legacy 9046787). Those inputs were missing, so O7 was left at 0.'
             )
+        # Keep a real dial even when the private-meter kWh is missing.
+        # Overwriting it with 0 made a present meter log look unused.
+        if delta is None:
             delta = Decimal(0)
+        if check_kwh is None:
             check_kwh = Decimal(1)
 
         alloc_o = self._percentages(delta, check_kwh)
