@@ -210,9 +210,10 @@ class AllocationEngine:
         Tries multiple lookup strategies:
         1. LOCKED RULE: Food Court account 82805-94744-7 is 100% FC (outside master)
         2. SPECIAL: Retail chillers 55861-52267-1 AC/SW split from THIS month's check-meter 6681757
-        3. Full account number (e.g., "52167-13569-2")
-        4. Short account number (first segment, e.g., "52167")
-        5. Meter number with LOCKED mapping (7662756→9092771, 7662761→9091324)
+        3. HARDCODED: Office chillers 13639-58422-3 and 79292-23337-6 are AO 92% / OC 8%
+        4. Full account number (e.g., "52167-13569-2")
+        5. Short account number (first segment, e.g., "52167")
+        6. Meter number with LOCKED mapping (7662756→9092771, 7662761→9091324)
         """
         # LOCKED RULE: Food Court account 82805-94744-7 = FC 100% (outside master)
         if account == '82805-94744-7':
@@ -227,6 +228,37 @@ class AllocationEngine:
                 return check_meter_split
             else:
                 logger.warning(f"Account {account}: Could not compute check-meter split, falling back to master")
+        
+        # HARDCODED RULE: Office chillers AO 92% / OC 8%
+        # These accounts are in the Allocation sheet by meter, but if the CLP parser
+        # doesn't extract the meters from the bill PDFs, we need a fallback
+        if account in ['13639-58422-3', '79292-23337-6']:
+            logger.info(f"Account {account}: Office chiller hardcoded AO 92% / OC 8%")
+            return [
+                {'centre': 'AO', 'percentage': 0.92},
+                {'centre': 'OC', 'percentage': 0.08}
+            ]
+        
+        # HARDCODED FALLBACK: Account-to-meter mappings from Max Demand sheet
+        # When CLP parser doesn't extract meters from bill PDFs, use these mappings
+        account_to_meter = {
+            '08731-83914-5': '9043327',
+            '00776-78552-1': '9044168',
+            '24096-78457-6': '9044624',
+            '40722-61440-7': '9044334',
+            '35204-69738-4': '9043416',
+            '70873-85471-3': '9045951',  # Tower1
+            '72399-00664-9': '9043400',  # Tower2
+            '23529-59279-9': '9045925',
+        }
+        
+        if account in account_to_meter:
+            meter = account_to_meter[account]
+            if meter in self.allocation_rules:
+                logger.info(f"Account {account}: Using hardcoded meter {meter} from Max Demand sheet")
+                return self.allocation_rules[meter]
+            else:
+                logger.warning(f"Account {account}: Hardcoded meter {meter} not found in allocation rules")
         
         # Try full account
         if account in self.allocation_rules:
@@ -250,6 +282,7 @@ class AllocationEngine:
             
             # Try direct lookup first
             if meter_no in self.allocation_rules:
+                logger.info(f"Account {account}: Found meter {meter_no} in allocation rules")
                 return self.allocation_rules[meter_no]
             
             # Apply LOCKED mapping (now enabled by default)
