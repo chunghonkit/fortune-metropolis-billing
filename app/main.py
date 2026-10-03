@@ -556,6 +556,115 @@ async def download_meter_log():
         raise HTTPException(500, f"Error generating meter log Excel: {str(e)}")
 
 
+def get_previous_month(billing_month: str) -> str:
+    """
+    Get previous month from billing month (YYYY-MM).
+    
+    Args:
+        billing_month: Current month in YYYY-MM format
+        
+    Returns:
+        Previous month in YYYY-MM format
+    """
+    try:
+        # Parse YYYY-MM
+        current = datetime.strptime(billing_month, '%Y-%m')
+        # Subtract one month
+        if current.month == 1:
+            previous = datetime(current.year - 1, 12, 1)
+        else:
+            previous = datetime(current.year, current.month - 1, 1)
+        return previous.strftime('%Y-%m')
+    except:
+        return None
+
+
+@app.post("/api/process-month-end")
+async def process_month_end():
+    """
+    Process Part 2: Copy previous month's workbooks and update with current data.
+    
+    Requires:
+    - Part 1 gate passed (15 bills + meter log)
+    - Previous month's Cost Sheet and Cost Allocation workbooks exist
+    
+    Returns:
+        Paths to updated workbooks in current month's out/ directory
+    """
+    try:
+        # Validate gate first
+        gate = validate_gate()
+        if not gate['passed']:
+            raise HTTPException(400, f"Gate must pass before processing month-end. Errors: {gate['errors']}")
+        
+        billing_month = session_storage['billing_month']
+        if not billing_month:
+            raise HTTPException(400, "Billing month not set")
+        
+        parsed_bills = session_storage['parsed_bills']
+        if not parsed_bills:
+            raise HTTPException(400, "No bills parsed")
+        
+        meter_log = session_storage['meter_log']
+        
+        # Get previous month
+        previous_month = get_previous_month(billing_month)
+        if not previous_month:
+            raise HTTPException(400, f"Could not compute previous month from {billing_month}")
+        
+        # Get metropolis root
+        metropolis_root = get_metropolis_root()
+        
+        # Check if master workbook exists
+        master_candidates = [
+            metropolis_root / billing_month / 'masters' / 'Cost Allocation.xlsx',
+            metropolis_root / billing_month / 'masters' / 'cost_allocation_master.xlsx',
+            Path('data/masters/cost_allocation_master.xlsx'),
+        ]
+        
+        master_path = None
+        for candidate in master_candidates:
+            if candidate.exists():
+                master_path = candidate
+                break
+        
+        if not master_path:
+            raise HTTPException(400, f"Cost Allocation master not found in {billing_month}/masters/")
+        
+        # Parse master workbook to get allocation rules
+        from app.master_parser import compute_weights_from_master
+        allocation_rules = compute_weights_from_master(str(master_path))
+        
+        if not allocation_rules:
+            raise HTTPException(400, "No allocation rules found in master workbook")
+        
+        # Process month-end: copy and update workbooks
+        from app.workbook_updater import process_month_end as process_workbooks
+        
+        updated_files = process_workbooks(
+            metropolis_root,
+            billing_month,
+            previous_month,
+            parsed_bills,
+            allocation_rules,
+            meter_log
+        )
+        
+        return {
+            "success": True,
+            "billing_month": billing_month,
+            "previous_month": previous_month,
+            "updated_files": {k: str(v) for k, v in updated_files.items()},
+            "message": f"Month-end processed: copied from {previous_month}, updated for {billing_month}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing month-end: {e}", exc_info=True)
+        raise HTTPException(500, f"Error processing month-end: {str(e)}")
+
+
 @app.post("/api/reset")
 async def reset_session():
     """Reset Part 1 session"""
