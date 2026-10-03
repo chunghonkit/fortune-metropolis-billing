@@ -28,11 +28,168 @@ Critical fixes for previous 0 KWH bugs:
   Bug6: Fuel No.of Days sum validation: sum(Fuel No.of Days) must equal For xx days
 """
 
+import logging
 import fitz
 import re
 import json
 import os
 import glob
+
+logger = logging.getLogger(__name__)
+
+# A private-meter id on these bills is 7 or 8 digits (10220967, 10353005).
+_METER = r'(?<!\d)(\d{7,8})(?!\d)'
+# Register readings are plain 6–8 digits or grouped with thousands commas.
+_READING = r'(\d{1,3}(?:,\d{3})+|\d{6,8})(?:\.\d+)?'
+_READING_LINE = re.compile(
+    _METER + r'\s+(\d{1,3})\s+' + _READING + r'\s+' + _READING
+)
+# Units sit in the next token: "161,494", "43,494.50", "59911.00", "4,808",
+# or a bare integer. "FiT" may sit between the meter and the units.
+_UNITS = r'(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{1,6})(?!\d)'
+_UNITS_LINE = re.compile(_METER + r'(?:\s+FiT)?' + r'\s+' + _UNITS, re.I)
+_TOKEN = re.compile(
+    r'(?<!\d)(?P<meter>\d{7,8})(?!\d)'
+    r'|(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+)'
+    r'|(?P<plain>\d{1,6})(?!\d)'
+)
+
+
+def _normalize_bill_text(text):
+    return (text.replace('\u00a0', ' ')
+                .replace('\u3000', ' ')
+                .replace('，', ',')
+                .replace('．', '.')
+                .replace('−', '-')
+                .replace('–', '-'))
+
+
+def _number(token):
+    value = float(str(token).replace(',', ''))
+    if abs(value - round(value)) < 1e-6:
+        return int(round(value))
+    return value
+
+
+def _overlaps(span, spans):
+    start, end = span
+    return any(start < other_end and end > other_start for other_start, other_end in spans)
+
+
+def _in_meter_run(text, start):
+    """True when this meter continues a stacked 電錶號碼 column."""
+    before = text[:start]
+    before = re.sub(r'(?:\s+|FiT\b)+$', '', before, flags=re.I)
+    return re.search(r'(?<!\d)\d{7,8}$', before) is not None
+
+
+def _append_meter(out_list, seen, meter_no, consumption, factor=1, previous=None, present=None):
+    if meter_no in seen:
+        return 0
+    if consumption is None or consumption <= 0 or consumption > 2_000_000:
+        return 0
+    out_list.append({
+        'meter_no': meter_no,
+        'factor': factor,
+        'previous': previous,
+        'present': present,
+        'consumption': consumption,
+    })
+    seen.add(meter_no)
+    return consumption
+
+
+def _extract_columnar_units(text, meters, seen, consumed):
+    """
+    Pair a stacked meter column with the units column below it.
+
+    PyMuPDF sometimes emits the 電錶號碼 column first and the 度數 column
+    second. Pairing each meter with the next number would treat the next
+    meter id as kWh. Zip equal runs instead. A following 總數 column repeats
+    the same units, so only the first run is used.
+    """
+    tokens = []
+    for match in _TOKEN.finditer(text):
+        if _overlaps(match.span(), consumed):
+            continue
+        if match.group('meter'):
+            tokens.append(('meter', match.group('meter'), match.span()))
+        else:
+            raw = match.group('num') or match.group('plain')
+            tokens.append(('num', _number(raw), match.span()))
+
+    index = 0
+    while index < len(tokens):
+        if tokens[index][0] != 'meter':
+            index += 1
+            continue
+        end = index
+        while end < len(tokens) and tokens[end][0] == 'meter':
+            end += 1
+        run = [token for token in tokens[index:end] if token[1] not in seen]
+        number_end = end
+        while number_end < len(tokens) and tokens[number_end][0] == 'num':
+            number_end += 1
+        numbers = tokens[end:number_end]
+        if len(run) >= 2 and len(numbers) >= len(run):
+            for (kind, meter_no, span), (_nkind, units, nspan) in zip(run, numbers):
+                added = _append_meter(meters, seen, meter_no, units)
+                if added:
+                    consumed.append(span)
+                    consumed.append(nspan)
+        index = end if len(run) < 2 or len(numbers) < len(run) else number_end
+
+
+def _extract_meter_consumptions(text):
+    """
+    Meter kWh from a CLP bill.
+
+    Tried in order, and only the immediate next tokens are used:
+    1. English register line: meter, factor, previous, present
+       (commas allowed). Consumption is (present − previous) × factor.
+    2. The next token is the units, optionally after the word FiT
+       (Rule 4 "9048406 161,494 + …" and Rule 10 "9115936 FiT 4,808").
+    3. A columnar 電錶號碼 / 度數 block whose meters are stacked apart
+       from their units.
+    """
+    text = _normalize_bill_text(text or '')
+    meters = []
+    seen = set()
+    consumed = []
+
+    for match in _READING_LINE.finditer(text):
+        meter_no, factor_s, prev_s, present_s = match.groups()
+        try:
+            factor = int(factor_s)
+            previous = _number(prev_s)
+            present = _number(present_s)
+        except ValueError:
+            continue
+        if factor < 1 or factor > 100:
+            continue
+        diff = present - previous
+        if diff <= 0 or diff > 1_000_000:
+            continue
+        consumption = _number(diff * factor)
+        if _append_meter(meters, seen, meter_no, consumption, factor, previous, present):
+            consumed.append(match.span())
+
+    for match in _UNITS_LINE.finditer(text):
+        if _overlaps(match.span(), consumed) or _in_meter_run(text, match.start()):
+            continue
+        meter_no, units_s = match.group(1), match.group(2)
+        if meter_no in seen:
+            continue
+        try:
+            units = _number(units_s)
+        except ValueError:
+            continue
+        if _append_meter(meters, seen, meter_no, units):
+            consumed.append(match.span())
+
+    _extract_columnar_units(text, meters, seen, consumed)
+    return meters
+
 
 def _extract_chinese_meter_units(text, out):
     """
@@ -48,34 +205,19 @@ def _extract_chinese_meter_units(text, out):
     """
     seen = {str(meter.get('meter_no')) for meter in out.get('meters', [])}
     added = 0.0
-    for block in re.findall(r'電錶號碼(.*?)總用電度數', text, re.S):
-        for meter_no, cons_s in re.findall(
-            r'(?<!\d)(\d{7,8})\s+([\d,]+(?:\.\d+)?)', block
-        ):
-            if meter_no in seen:
-                continue
-            try:
-                consumption = float(cons_s.replace(',', ''))
-            except ValueError:
-                continue
-            if consumption <= 0:
-                continue
-            out['meters'].append({
-                'meter_no': meter_no,
-                'factor': 1,
-                'previous': None,
-                'present': None,
-                'consumption': consumption,
-            })
-            seen.add(meter_no)
-            added += consumption
+    for meter in _extract_meter_consumptions(text):
+        if meter['meter_no'] in seen:
+            continue
+        out['meters'].append(meter)
+        seen.add(meter['meter_no'])
+        added += meter['consumption']
     return added
 
 
 def parse_clp_bill(pdf_path):
     doc = fitz.open(pdf_path)
     full_text = "\n".join([page.get_text() for page in doc])
-    text = full_text.replace("−", "-").replace("–", "-")
+    text = _normalize_bill_text(full_text)
 
     out = {
         "file": os.path.basename(pdf_path),
@@ -174,36 +316,21 @@ def parse_clp_bill(pdf_path):
         if m:
             out["deposit"] = float(m.group(1).replace(",", ""))
 
-    # --- METERS: Rule 3 Multi Factor ---
-    # Pattern: MeterNo (7 digits) + Factor + Previous + Present on consecutive lines/spaces
-    meter_pattern = re.findall(r'(\d{7})\s+(\d+)\s+(\d{6,7})\s+(\d{6,7})', text)
-    total_meter_consumption = 0
-    for meter_no, factor_s, prev_s, present_s in meter_pattern:
-        try:
-            factor = int(factor_s)
-            prev = int(prev_s)
-            present = int(present_s)
-            diff = present - prev
-            if diff <= 0 or diff > 1_000_000:  # invalid
-                continue
-            if factor > 100:  # not a factor
-                continue
-            cons = diff * factor
-            out["meters"].append({
-                "meter_no": meter_no,
-                "factor": factor,
-                "previous": prev,
-                "present": present,
-                "consumption": cons
-            })
-            total_meter_consumption += cons
-        except:
-            continue
-
-    # Chinese bills list 電錶號碼 / 度數 instead of factor + previous + present.
-    # Retail chillers need each private meter's units (9024222 is the check-meter
-    # denominator). Do not substitute the building total for that one meter.
-    total_meter_consumption += _extract_chinese_meter_units(text, out)
+    # Private-meter units. 9024222 (legacy 9046787) is the check-meter
+    # denominator, and 52167's FiT retail split needs each of its meters.
+    # Do not substitute the building total, and do not treat the next meter
+    # id in a stacked 電錶號碼 column as kWh.
+    out["meters"] = _extract_meter_consumptions(text)
+    total_meter_consumption = sum(meter["consumption"] for meter in out["meters"])
+    if out["meters"]:
+        logger.info(
+            "Account %s meter units: %s",
+            out.get("account"),
+            ", ".join(
+                f"{meter['meter_no']}={meter['consumption']:g}"
+                for meter in out["meters"]
+            ),
+        )
 
     # --- ESTIMATED: Rule 17 Total Consumption ---
     if out["is_estimated"]:

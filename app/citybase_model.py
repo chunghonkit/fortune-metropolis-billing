@@ -512,15 +512,17 @@ class CitybaseModel:
     def _elect_charges(self, bills, by_account):
         warnings = []
         elect: Dict[int, Decimal] = {}
-        kwh_by_meter = _kwh_index(bills)
 
         def fill_groups(account, groups, label):
             if account not in by_account:
                 return
             base = by_account[account]
+            # Only this account's meters. 9132488 on the Tower bill is not a
+            # chiller meter, and another bill must not supply 9024222's units.
+            kwh_by_meter = _kwh_index(bills, account)
             weights = []
             for elect_row, meters in groups:
-                weight = sum((kwh_by_meter.get(meter, Decimal(0)) for meter in meters), Decimal(0))
+                weight = _group_kwh(meters, kwh_by_meter)
                 weights.append((elect_row, weight))
             total_kwh = sum((weight for _, weight in weights), Decimal(0))
             if total_kwh <= 0:
@@ -554,8 +556,9 @@ class CitybaseModel:
         if meter_log and meter_log.get('previous') is not None and meter_log.get('present') is not None:
             if not meter_log.get('meter_no') or str(meter_log.get('meter_no')) == CHECK_METER_NO:
                 delta = _dec(meter_log['present']) - _dec(meter_log['previous'])
-        kwh_by_meter = _kwh_index(bills)
-        check_kwh = sum((kwh_by_meter.get(meter, Decimal(0)) for meter in self.check_kwh_meters), Decimal(0))
+        # O7's denominator is 9024222 on the chiller bill only.
+        kwh_by_meter = _kwh_index(bills, CHILLER_ACCOUNT)
+        check_kwh = _group_kwh(self.check_kwh_meters, kwh_by_meter)
         if check_kwh <= 0:
             check_kwh = None
         return delta, check_kwh
@@ -612,9 +615,19 @@ def _bill_base(bill: Dict) -> Decimal:
     return total
 
 
-def _kwh_index(bills: List[Dict]) -> Dict[str, Decimal]:
+# Allocation still names the pre-2011 meter. The bill names the meter that
+# replaced it. A kWh row must not add the legacy id on top of the live ones.
+_LEGACY_METERS = {
+    '9046064', '9046505', '9046787', '9046243',
+    '9055260', '9054743', '9055919',
+}
+
+
+def _kwh_index(bills: List[Dict], account: Optional[str] = None) -> Dict[str, Decimal]:
     index: Dict[str, Decimal] = {}
     for bill in bills:
+        if account is not None and bill.get('account') != account:
+            continue
         for meter in bill.get('meters') or []:
             number = str(meter.get('meter_no') or '').strip()
             if not number:
@@ -624,6 +637,27 @@ def _kwh_index(bills: List[Dict]) -> Dict[str, Decimal]:
                 consumption = meter.get('kwh') or 0
             index[number] = index.get(number, Decimal(0)) + _dec(consumption)
     return index
+
+
+def _group_kwh(meters, kwh_by_meter: Dict[str, Decimal]) -> Decimal:
+    """
+    Sum the private meters in one Elect Charge kWh row.
+
+    A legacy id is used only when the bill still carries that id and not
+    the meter that replaced it. FiT rows list several live meters; those
+    all count. Replacements do not count twice.
+    """
+    total = Decimal(0)
+    present = {meter for meter in meters if kwh_by_meter.get(meter, Decimal(0)) > 0}
+    live_present = any(meter not in _LEGACY_METERS for meter in present)
+    for meter in meters:
+        kwh = kwh_by_meter.get(meter, Decimal(0))
+        if kwh <= 0:
+            continue
+        if meter in _LEGACY_METERS and live_present:
+            continue
+        total += kwh
+    return total
 
 
 def _expand_sum_rows(formula: str) -> List[int]:
