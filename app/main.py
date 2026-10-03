@@ -265,12 +265,16 @@ def validate_gate():
 
 
 def extract_bill_month(bill):
-    """Extract YYYY-MM from bill dates (from_date format: DD-MM-YY)"""
-    from_date = bill.get('from_date')  # Format: DD-MM-YY
-    if from_date:
+    """
+    Extract YYYY-MM from bill dates.
+    Uses to_date (period end) since billing month is the month the period ends in.
+    Format: DD-MM-YY
+    """
+    to_date = bill.get('to_date')  # Use period END date, not start
+    if to_date:
         try:
             # Parse DD-MM-YY
-            parts = from_date.split('-')
+            parts = to_date.split('-')
             if len(parts) == 3:
                 dd, mm, yy = parts
                 # Convert YY to YYYY (assume 20YY for yy < 80, else 19YY)

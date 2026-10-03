@@ -80,14 +80,26 @@ def parse_clp_bill(pdf_path):
     m = re.search(r'(\d{5}-\d{5}-\d)', text)
     if m: out["account"] = m.group(1)
 
-    # Dates
+    # Dates - support both English and Chinese formats
     m = re.search(r'From\s+(\d{2}-\d{2}-\d{2})\s+to\s+(\d{2}-\d{2}-\d{2})', text, re.I)
     if m:
         out["from_date"] = m.group(1)
         out["to_date"] = m.group(2)
+    else:
+        # Try Chinese format: 由 DD-MM-YY 至 DD-MM-YY
+        m = re.search(r'由\s+(\d{2}-\d{2}-\d{2})\s+至\s+(\d{2}-\d{2}-\d{2})', text)
+        if m:
+            out["from_date"] = m.group(1)
+            out["to_date"] = m.group(2)
+    
     m = re.search(r'For\s+(\d+)\s+days', text, re.I)
     if m:
         out["days"] = int(m.group(1))
+    else:
+        # Try Chinese format: 共 XX 日
+        m = re.search(r'共\s+(\d+)\s+日', text)
+        if m:
+            out["days"] = int(m.group(1))
 
     # Flags
     out["is_bulk"] = "Bulk Tariff" in text
@@ -152,6 +164,18 @@ def parse_clp_bill(pdf_path):
             out["fuel_units"] = out["kwh"]
         except:
             pass
+    
+    # Try Chinese format: 用電度數總計 or 總用電度數
+    if out["kwh"] is None:
+        m_chinese = re.search(r'用電度數總計\s+([\d,]+\.?\d*)', text)
+        if not m_chinese:
+            m_chinese = re.search(r'總用電度數\s+([\d,]+\.?\d*)', text)
+        if m_chinese:
+            try:
+                out["kwh"] = float(m_chinese.group(1).replace(",", ""))
+                out["fuel_units"] = out["kwh"]
+            except:
+                pass
 
     # --- SINGLE RATE fallback: Energy Charge @110.6 ---
     if out["kwh"] is None:

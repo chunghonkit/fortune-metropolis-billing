@@ -9,6 +9,7 @@ Tests:
 - Gate FAIL on invalid meter log
 - Folder scan (mocked)
 - Meter log completeness
+- Regression tests for compressed PDF and month classification bugs
 """
 
 import pytest
@@ -48,8 +49,19 @@ def reset_session():
     session_storage['parsed_bills'] = []
 
 
-def create_mock_bill(account, from_date="01-04-25", to_date="30-04-25", kwh=1000):
+def create_mock_bill(account, from_date="01-04-25", to_date=None, kwh=1000):
     """Create a mock parsed bill"""
+    # If to_date not provided, assume period ends 30 days later in same month
+    if to_date is None:
+        # Parse from_date to generate to_date
+        parts = from_date.split('-')
+        if len(parts) == 3:
+            dd, mm, yy = parts
+            # Default to day 30 of the same month
+            to_date = f"30-{mm}-{yy}"
+        else:
+            to_date = from_date
+    
     return {
         'file': f'{account}.pdf',
         'account': account,
@@ -65,14 +77,14 @@ class TestBillingMonth:
     """Test billing month handling"""
     
     def test_extract_bill_month_from_date(self):
-        """Test extracting YYYY-MM from bill dates"""
-        bill = create_mock_bill('55861-52267-1', from_date='15-04-25')
+        """Test extracting YYYY-MM from bill to_date (period end)"""
+        bill = create_mock_bill('55861-52267-1', from_date='15-03-25', to_date='15-04-25')
         month = extract_bill_month(bill)
-        assert month == '2025-04'
+        assert month == '2025-04'  # Uses to_date (period end), not from_date
     
     def test_extract_bill_month_invalid(self):
         """Test extracting month from invalid date"""
-        bill = {'account': 'test', 'from_date': 'invalid'}
+        bill = {'account': 'test', 'to_date': 'invalid'}
         month = extract_bill_month(bill)
         assert month is None
 
@@ -184,13 +196,13 @@ class TestGateValidation:
         session_storage['meter_log']['previous'] = 1000000
         session_storage['meter_log']['present'] = 1001000
         
-        # Add 14 correct accounts
+        # Add 14 correct accounts (period ends in April)
         for account in EXPECTED_ACCOUNTS[:-1]:
-            bill = create_mock_bill(account, from_date='15-04-25', kwh=10000)
+            bill = create_mock_bill(account, from_date='15-04-25', to_date='30-04-25', kwh=10000)
             session_storage['parsed_bills'].append(bill)
         
-        # Add 1 account from wrong month
-        wrong_month_bill = create_mock_bill(EXPECTED_ACCOUNTS[-1], from_date='15-05-25', kwh=10000)
+        # Add 1 account from wrong month (period ends in May)
+        wrong_month_bill = create_mock_bill(EXPECTED_ACCOUNTS[-1], from_date='15-04-25', to_date='15-05-25', kwh=10000)
         session_storage['parsed_bills'].append(wrong_month_bill)
         
         gate = validate_gate()
@@ -251,17 +263,17 @@ class TestAccountChecklist:
         session_storage['meter_log']['previous'] = 1000000
         session_storage['meter_log']['present'] = 1001000
         
-        # Add first 10 accounts (matched)
+        # Add first 10 accounts (matched, period ends in April)
         for account in EXPECTED_ACCOUNTS[:10]:
-            bill = create_mock_bill(account, from_date='15-04-25', kwh=10000)
+            bill = create_mock_bill(account, from_date='15-03-25', to_date='15-04-25', kwh=10000)
             session_storage['parsed_bills'].append(bill)
         
         # Add duplicate of first account
-        duplicate = create_mock_bill(EXPECTED_ACCOUNTS[0], from_date='15-04-25', kwh=5000)
+        duplicate = create_mock_bill(EXPECTED_ACCOUNTS[0], from_date='15-03-25', to_date='15-04-25', kwh=5000)
         session_storage['parsed_bills'].append(duplicate)
         
-        # Add one from wrong month
-        wrong = create_mock_bill(EXPECTED_ACCOUNTS[10], from_date='15-05-25', kwh=10000)
+        # Add one from wrong month (period ends in May)
+        wrong = create_mock_bill(EXPECTED_ACCOUNTS[10], from_date='15-04-25', to_date='15-05-25', kwh=10000)
         session_storage['parsed_bills'].append(wrong)
         
         # Last 4 accounts missing
@@ -292,6 +304,85 @@ class TestExpectedAccounts:
         """Test list contains FiT accounts"""
         assert '52167-13569-2' in EXPECTED_ACCOUNTS
         assert '00776-78552-1' in EXPECTED_ACCOUNTS
+
+
+class TestBugRegressions:
+    """Regression tests for fixed bugs"""
+    
+    def test_compressed_pdf_chinese_format(self):
+        """
+        Regression test for Bug 1: Account 72399-00664-9 compressed PDF parsing.
+        
+        The compressed PDF uses Chinese date format (由...至) and Chinese kWh label
+        (用電度數總計) instead of English "From...to" and "Grand Total Units Consumed".
+        """
+        # Simulate parsing result with Chinese format
+        from app.clp_parser import parse_clp_bill
+        
+        # Test with the actual compressed PDF
+        pdf_path = '/home/ubuntu/.cursor/projects/workspace/uploads/bill-72399-202504_6706.pdf'
+        if os.path.exists(pdf_path):
+            result = parse_clp_bill(pdf_path)
+            
+            # Verify account parsed
+            assert result['account'] == '72399-00664-9'
+            
+            # Verify dates parsed (Chinese format: 由 24-03-25 至 23-04-25)
+            assert result['from_date'] == '24-03-25'
+            assert result['to_date'] == '23-04-25'
+            
+            # Verify days parsed (Chinese format: 共 31 日)
+            assert result['days'] == 31
+            
+            # Verify kWh parsed (Chinese format: 用電度數總計 59910.00)
+            assert result['kwh'] is not None
+            assert result['kwh'] > 0
+            # Should be around 59,910 (allow small variance)
+            assert 59000 < result['kwh'] < 61000
+    
+    def test_month_classification_uses_period_end(self, reset_session):
+        """
+        Regression test for Bug 2: Month classification should use period END date.
+        
+        Bills with periods starting in previous calendar month but ending in selected
+        month should be classified as the end month, not the start month.
+        
+        Example: Period 24-03-25 to 23-04-25 should be April 2025, not March 2025.
+        """
+        session_storage['billing_month'] = '2025-04'
+        session_storage['meter_log']['previous'] = 1000000
+        session_storage['meter_log']['present'] = 1001000
+        
+        # Add bills that start in March but end in April
+        # These should be classified as April bills
+        for account in EXPECTED_ACCOUNTS:
+            # Period starts March 24, ends April 23
+            bill = create_mock_bill(account, from_date='24-03-25', to_date='23-04-25', kwh=10000)
+            session_storage['parsed_bills'].append(bill)
+        
+        # Verify all bills are recognized as April bills
+        gate = validate_gate()
+        assert gate['passed'] is True
+        assert gate['summary']['matched'] == 15
+        assert gate['summary']['wrong_month'] == 0
+        
+        # All accounts should be "matched", not "wrong_month"
+        for account in EXPECTED_ACCOUNTS:
+            assert gate['account_checklist'][account]['status'] == 'matched'
+    
+    def test_month_extraction_logic(self):
+        """Test that month extraction uses to_date (period end) not from_date (period start)"""
+        # Bill period: starts March, ends April
+        bill = create_mock_bill('72399-00664-9', from_date='24-03-25', to_date='23-04-25')
+        
+        # Should extract April (end month), not March (start month)
+        month = extract_bill_month(bill)
+        assert month == '2025-04', f"Expected 2025-04 (period end), got {month}"
+        
+        # Another case: starts Feb, ends March
+        bill2 = create_mock_bill('72399-00664-9', from_date='24-02-25', to_date='23-03-25')
+        month2 = extract_bill_month(bill2)
+        assert month2 == '2025-03', f"Expected 2025-03 (period end), got {month2}"
 
 
 if __name__ == '__main__':
