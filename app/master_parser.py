@@ -225,33 +225,30 @@ class MasterWorkbookParser:
     
     def _parse_ac_dept_column_c_weights(self, sheet) -> Dict[str, List[Dict]]:
         """
-        Parse AC DEPT sheet using column C weights (runtime source of truth).
+        Parse AC DEPT sheet - REAL Citybase structure.
         
-        CRITICAL: Centre column location varies across workbooks!
-        - Do NOT assume centre is in column B
-        - Search for the column containing known centre codes (FC, AC, SW, C, DC, etc.)
-        - Weight is typically in column C, but validate this too
-        - Account is typically in column A
-        
-        Expected structure:
-        - One column: Account/Meter ID
-        - One column: Centre label (FC, AC, SW, C, DC, AO, OC, SA, CP, O, etc.)
-        - One column: Weight value (numeric)
-        - Multiple rows per account (one per centre)
+        Actual structure (verified from real April workbook):
+        - Row 3: Headers
+        - Column A: "Elect. Meter No.:" - Account/meter (only on first row of group)
+        - Columns B-M: Monthly charges (formulas/numbers - NOT weights!)
+        - Column N: "Percentage:" - The actual percentages (already computed!)
+        - Column O: "Allocated Cost Centre:" - Centre names (long form)
         
         Example:
-            Account     Centre    Weight
-            55861       AC        525.48
-            55861       SW        198.99
-            → AC: 525.48 / (525.48 + 198.99) = 72.54%
-            → SW: 198.99 / (525.48 + 198.99) = 27.46%
+            Row 73: A="55861-52267-1 (A)", N=0.848169931, O="AC - Commercial Air Conditioning"
+            Row 74: A="",                  N=0.151830069, O="SW - Sea Water Pump House"
+        
+        Key insights:
+        - Account in column A only on first row of group; subsequent rows blank
+        - Percentages ALREADY COMPUTED in column N (not weights to compute from!)
+        - Centre in column O as "AC - Commercial Air Conditioning" (extract "AC" code)
+        - Column C is charges (numeric) - must NOT be used as centre!
         
         Strategy:
-        1. Find header row
-        2. Identify account column (contains account numbers like "52167-13569-2")
-        3. Identify centre column (contains centre codes like "FC", "AC", "SW")
-        4. Identify weight column (contains numeric weights)
-        5. Parse rows using discovered column positions
+        1. Find "Percentage:" and "Allocated Cost Centre:" columns by header
+        2. Track current account (persists across rows until new account found)
+        3. Extract short code from centre name ("AC" from "AC - Commercial...")
+        4. Use percentage from column N directly
         """
         allocations = {}
         
@@ -260,151 +257,193 @@ class MasterWorkbookParser:
         if not rows:
             return allocations
         
-        # Find header row
-        header_row_idx = 0
+        # Find header row - look for "Percentage:" and "Allocated Cost Centre:"
+        header_row_idx = None
         for idx, row in enumerate(rows[:10]):
-            if any(str(cell).lower() in ['account', 'meter', 'acct', 'a/c', 'weight', 'centre', 'center'] 
-                   for cell in row if cell):
+            if any('percentage' in str(cell).lower() for cell in row if cell):
                 header_row_idx = idx
+                logger.info(f"Found header row at index {idx}")
                 break
         
-        logger.info(f"AC DEPT header row: {header_row_idx}")
+        if header_row_idx is None:
+            logger.warning("Could not find header row with 'Percentage:' - trying allocation sheet parser as fallback")
+            # Fall back to the allocation sheet parser for test fixtures
+            return self._parse_allocation_sheet_openpyxl(sheet)
         
-        # Known centre codes to search for
-        KNOWN_CENTRES = {'FC', 'AC', 'SW', 'C', 'DC', 'AO', 'OC', 'SA', 'CP', 'O'}
+        # Find column positions from headers
+        headers = [str(cell).lower() if cell else '' for cell in rows[header_row_idx]]
         
-        # Sample data rows to discover column types
-        sample_rows = rows[header_row_idx + 1:min(header_row_idx + 20, len(rows))]
-        
-        # Discover which column has centre codes
-        centre_col = None
         account_col = None
-        weight_col = None
+        percentage_col = None
+        centre_col = None
         
-        # Check each column in sample rows
-        for col_idx in range(min(10, max(len(row) for row in sample_rows if row))):
-            col_values = []
-            for row in sample_rows:
-                if row and col_idx < len(row) and row[col_idx] is not None:
-                    col_values.append(row[col_idx])
-            
-            if not col_values:
-                continue
-            
-            # Check if this column contains centre codes
-            centre_matches = sum(1 for val in col_values 
-                                if isinstance(val, str) and val.strip().upper() in KNOWN_CENTRES)
-            
-            # Check if this column contains account numbers (has hyphens)
-            account_matches = sum(1 for val in col_values 
-                                 if isinstance(val, str) and '-' in val)
-            
-            # Check if this column contains numeric weights
-            numeric_matches = sum(1 for val in col_values 
-                                 if isinstance(val, (int, float)) and val > 0)
-            
-            logger.debug(f"Column {col_idx}: centre_matches={centre_matches}, account_matches={account_matches}, numeric_matches={numeric_matches}")
-            
-            # Identify column type based on content
-            # Use >=1 for small datasets (some test workbooks have only 1-2 accounts)
-            if centre_matches >= 1 and centre_col is None:
-                centre_col = col_idx
-                logger.info(f"Discovered centre column: {col_idx}")
-            elif account_matches >= 1 and account_col is None:
-                account_col = col_idx
-                logger.info(f"Discovered account column: {col_idx}")
-            elif numeric_matches >= 1 and weight_col is None:
-                weight_col = col_idx
-                logger.info(f"Discovered weight column: {col_idx}")
+        for idx, h in enumerate(headers):
+            if 'meter' in h or 'account' in h or 'acct' in h:
+                account_col = idx
+                logger.info(f"Found account column: {idx}")
+            elif 'percentage' in h:
+                percentage_col = idx
+                logger.info(f"Found percentage column: {idx}")
+            elif 'allocated' in h and 'centre' in h:
+                centre_col = idx
+                logger.info(f"Found centre column: {idx}")
         
-        # If discovery failed, fall back to common positions
+        if percentage_col is None or centre_col is None:
+            logger.warning(f"Missing columns: percentage_col={percentage_col}, centre_col={centre_col}")
+            return allocations
+        
         if account_col is None:
             account_col = 0
-            logger.warning(f"Could not discover account column, using default: 0")
-        if centre_col is None:
-            centre_col = 1
-            logger.warning(f"Could not discover centre column, using default: 1")
-        if weight_col is None:
-            weight_col = 2
-            logger.warning(f"Could not discover weight column, using default: 2")
+            logger.warning("Account column not found in headers, using column 0")
         
-        logger.info(f"AC DEPT columns: account={account_col}, centre={centre_col}, weight={weight_col}")
+        logger.info(f"AC DEPT columns: account={account_col}, percentage={percentage_col}, centre={centre_col}")
         
-        # Group rows by account and collect centre+weight pairs
-        account_groups = {}
+        # Parse data rows - track current account across rows
+        current_account = None
+        account_allocations = []
         
         for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             if not row or all(cell is None for cell in row):
                 continue
             
-            # Skip #REF! and error rows
+            # Check for new account in column A
             account_val = row[account_col] if account_col < len(row) else None
-            if account_val is None or str(account_val).startswith('#'):
+            if account_val and str(account_val).strip() and not str(account_val).startswith('#'):
+                # New account found - save previous account if exists
+                if current_account and account_allocations:
+                    allocations[current_account] = account_allocations
+                    logger.info(f"Saved account {current_account}: {len(account_allocations)} centres")
+                
+                # Start new account
+                account_str = str(account_val).strip()
+                # Remove trailing letters in parentheses like "(A)" or "(B)"
+                import re
+                account_match = re.match(r'^([\d\-]+)', account_str)
+                if account_match:
+                    current_account = account_match.group(1)
+                else:
+                    current_account = account_str
+                
+                account_allocations = []
+                logger.debug(f"Row {row_idx}: New account {current_account}")
+            
+            # Skip if no current account
+            if not current_account:
                 continue
             
-            account = str(account_val).strip().replace(' ', '')
-            if not account or account.lower() in ['none', 'total', '']:
-                continue
-            
-            # Get centre LABEL
-            centre_val = row[centre_col] if centre_col < len(row) else None
-            if centre_val is None or str(centre_val).startswith('#'):
-                continue
-            
-            centre = str(centre_val).strip()
-            if not centre or centre.lower() in ['none', '']:
-                continue
-            
-            # CRITICAL: Validate that centre is not a number!
-            try:
-                float(centre)
-                # If this succeeds, centre is numeric - this is WRONG
-                logger.warning(f"Row {row_idx}: account {account} has NUMERIC centre '{centre}' - skipping (likely wrong column)")
-                continue
-            except (ValueError, TypeError):
-                # Good - centre is not a pure number
-                pass
-            
-            # Get weight VALUE
-            weight_val = row[weight_col] if weight_col < len(row) else None
-            if weight_val is None or str(weight_val).startswith('#'):
+            # Get percentage from column N
+            pct_val = row[percentage_col] if percentage_col < len(row) else None
+            if pct_val is None or str(pct_val).startswith('#'):
                 continue
             
             try:
-                weight = float(weight_val)
-                if weight <= 0:
+                pct = float(pct_val)
+                if pct <= 0:
                     continue
             except (ValueError, TypeError):
                 continue
             
-            # Add to account group
-            if account not in account_groups:
-                account_groups[account] = []
-            
-            account_groups[account].append({
-                'centre': centre,
-                'weight': weight
-            })
-            logger.debug(f"Row {row_idx}: account {account} centre {centre} weight {weight}")
-        
-        # Compute percentages for each account
-        for account, entries in account_groups.items():
-            total_weight = sum(e['weight'] for e in entries)
-            if total_weight == 0:
-                logger.warning(f"Account {account} has zero total weight")
+            # Get centre name from column O
+            centre_val = row[centre_col] if centre_col < len(row) else None
+            if centre_val is None or str(centre_val).startswith('#'):
                 continue
             
-            allocations[account] = [
-                {
-                    'centre': e['centre'],
-                    'percentage': e['weight'] / total_weight
-                }
-                for e in entries
-            ]
+            centre_full = str(centre_val).strip()
+            if not centre_full:
+                continue
             
-            logger.info(f"Account {account}: {len(entries)} centres ({', '.join(e['centre'] for e in entries)}), total weight {total_weight:.2f}")
+            # Extract short code from long name
+            # "AC - Commercial Air Conditioning" -> "AC"
+            # "Hotel / Commercial / SA" -> ["C", "SA"]
+            centre_code = self._extract_centre_code_from_long_name(centre_full)
+            
+            # CRITICAL: Validate centre is not numeric
+            try:
+                float(centre_code)
+                logger.warning(f"Row {row_idx}: NUMERIC centre '{centre_code}' from '{centre_full}' - SKIPPING")
+                continue
+            except (ValueError, TypeError):
+                pass  # Good - not numeric
+            
+            # Handle shared allocations (centre codes with "/")
+            # Example: "C/SA" means split percentage evenly across C and SA
+            if '/' in centre_code:
+                centre_codes = [c.strip() for c in centre_code.split('/')]
+                split_pct = pct / len(centre_codes)
+                
+                for code in centre_codes:
+                    account_allocations.append({
+                        'centre': code,
+                        'percentage': split_pct
+                    })
+                    logger.debug(f"Row {row_idx}: account {current_account}, centre {code} ({centre_full} split), pct {split_pct:.4f}")
+            else:
+                # Single centre
+                account_allocations.append({
+                    'centre': centre_code,
+                    'percentage': pct
+                })
+                logger.debug(f"Row {row_idx}: account {current_account}, centre {centre_code} ({centre_full}), pct {pct:.4f}")
+        
+        # Save last account
+        if current_account and account_allocations:
+            allocations[current_account] = account_allocations
+            logger.info(f"Saved account {current_account}: {len(account_allocations)} centres")
         
         return allocations
+    
+    def _extract_centre_code_from_long_name(self, centre_full: str) -> str:
+        """
+        Extract short centre code from long name.
+        
+        Examples:
+            "AC - Commercial Air Conditioning" -> "AC"
+            "SW - Sea Water Pump House" -> "SW"
+            "C - Commercial" -> "C"
+            "Hotel / Commercial / SA" -> "C/SA" (Hotel not a valid code, extract C and SA)
+            "SA / Commercial" -> "SA/C"
+            "Hotel / Commercial" -> "C"
+        
+        Strategy:
+        1. If format is "CODE - Description", extract CODE
+        2. If format has slashes, extract all known codes from segments
+        3. Return extracted code(s) joined with "/" or original if no match
+        
+        Known codes: AC, AO, C, CP, DC, FC, O, OC, SA, SW
+        """
+        # Known centre codes
+        KNOWN_CODES = {'AC', 'AO', 'C', 'CP', 'DC', 'FC', 'O', 'OC', 'SA', 'SW'}
+        
+        # Try "CODE - Description" format first
+        if ' - ' in centre_full:
+            code = centre_full.split(' - ')[0].strip()
+            if code in KNOWN_CODES or len(code) <= 3:
+                return code
+        
+        # If it has slashes, extract all known codes from segments
+        if '/' in centre_full:
+            segments = [s.strip() for s in centre_full.split('/')]
+            matched_codes = []
+            
+            for seg in segments:
+                # Direct match
+                if seg in KNOWN_CODES:
+                    matched_codes.append(seg)
+                # Check if segment contains a known code word
+                elif 'Commercial' in seg and 'C' not in matched_codes:
+                    matched_codes.append('C')
+                elif 'Serviced Apartment' in seg or seg == 'SA':
+                    if 'SA' not in matched_codes:
+                        matched_codes.append('SA')
+                elif 'Office' in seg and 'O' not in matched_codes:
+                    # Could be O or OC or AO - default to O
+                    matched_codes.append('O')
+            
+            if matched_codes:
+                return '/'.join(matched_codes)
+        
+        # Return as-is if no extraction worked
+        return centre_full
     
     def _parse_allocation_sheet_pandas(self, df: pd.DataFrame) -> Dict[str, List[Dict]]:
         """Parse Allocation sheet using pandas"""
