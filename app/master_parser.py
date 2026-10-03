@@ -227,12 +227,17 @@ class MasterWorkbookParser:
         """
         Parse AC DEPT sheet using column C weights (runtime source of truth).
         
+        CRITICAL: Centre column location varies across workbooks!
+        - Do NOT assume centre is in column B
+        - Search for the column containing known centre codes (FC, AC, SW, C, DC, etc.)
+        - Weight is typically in column C, but validate this too
+        - Account is typically in column A
+        
         Expected structure:
-        - Column A: Account/Meter ID
-        - Column B: Centre label (FC, AC, SW, C, DC, etc.)
-        - Column C: Weight value
-        - Rows grouped by account (multiple rows per account, one per centre)
-        - Compute percentage = weight / Σ(weights) for each account group
+        - One column: Account/Meter ID
+        - One column: Centre label (FC, AC, SW, C, DC, AO, OC, SA, CP, O, etc.)
+        - One column: Weight value (numeric)
+        - Multiple rows per account (one per centre)
         
         Example:
             Account     Centre    Weight
@@ -241,8 +246,12 @@ class MasterWorkbookParser:
             → AC: 525.48 / (525.48 + 198.99) = 72.54%
             → SW: 198.99 / (525.48 + 198.99) = 27.46%
         
-        CRITICAL: Centre identity comes from column B (the label), NOT from column C (the weight)!
-        Using the weight as the centre name causes numeric keys like "216328.807591692" instead of "AC".
+        Strategy:
+        1. Find header row
+        2. Identify account column (contains account numbers like "52167-13569-2")
+        3. Identify centre column (contains centre codes like "FC", "AC", "SW")
+        4. Identify weight column (contains numeric weights)
+        5. Parse rows using discovered column positions
         """
         allocations = {}
         
@@ -259,30 +268,65 @@ class MasterWorkbookParser:
                 header_row_idx = idx
                 break
         
-        # Parse structure: account in A, centre in B, weight in C
-        headers = [str(cell).strip().lower() if cell else '' for cell in rows[header_row_idx]]
+        logger.info(f"AC DEPT header row: {header_row_idx}")
         
-        # Find columns
-        account_col = None
+        # Known centre codes to search for
+        KNOWN_CENTRES = {'FC', 'AC', 'SW', 'C', 'DC', 'AO', 'OC', 'SA', 'CP', 'O'}
+        
+        # Sample data rows to discover column types
+        sample_rows = rows[header_row_idx + 1:min(header_row_idx + 20, len(rows))]
+        
+        # Discover which column has centre codes
         centre_col = None
+        account_col = None
         weight_col = None
         
-        for idx, h in enumerate(headers):
-            if 'account' in h or 'meter' in h or 'acct' in h or 'a/c' in h:
-                account_col = idx
-            elif 'centre' in h or 'center' in h or 'cost' in h or 'dept' in h:
-                centre_col = idx
-            elif 'weight' in h or h == 'c':  # Column C is often labeled 'weight' or just 'c'
-                weight_col = idx
+        # Check each column in sample rows
+        for col_idx in range(min(10, max(len(row) for row in sample_rows if row))):
+            col_values = []
+            for row in sample_rows:
+                if row and col_idx < len(row) and row[col_idx] is not None:
+                    col_values.append(row[col_idx])
+            
+            if not col_values:
+                continue
+            
+            # Check if this column contains centre codes
+            centre_matches = sum(1 for val in col_values 
+                                if isinstance(val, str) and val.strip().upper() in KNOWN_CENTRES)
+            
+            # Check if this column contains account numbers (has hyphens)
+            account_matches = sum(1 for val in col_values 
+                                 if isinstance(val, str) and '-' in val)
+            
+            # Check if this column contains numeric weights
+            numeric_matches = sum(1 for val in col_values 
+                                 if isinstance(val, (int, float)) and val > 0)
+            
+            logger.debug(f"Column {col_idx}: centre_matches={centre_matches}, account_matches={account_matches}, numeric_matches={numeric_matches}")
+            
+            # Identify column type based on content
+            # Use >=1 for small datasets (some test workbooks have only 1-2 accounts)
+            if centre_matches >= 1 and centre_col is None:
+                centre_col = col_idx
+                logger.info(f"Discovered centre column: {col_idx}")
+            elif account_matches >= 1 and account_col is None:
+                account_col = col_idx
+                logger.info(f"Discovered account column: {col_idx}")
+            elif numeric_matches >= 1 and weight_col is None:
+                weight_col = col_idx
+                logger.info(f"Discovered weight column: {col_idx}")
         
-        # If columns not found by header, use standard positions for AC DEPT sheet
-        # CRITICAL: Account in A (0), Centre in B (1), Weight in C (2)
+        # If discovery failed, fall back to common positions
         if account_col is None:
-            account_col = 0  # Column A
+            account_col = 0
+            logger.warning(f"Could not discover account column, using default: 0")
         if centre_col is None:
-            centre_col = 1  # Column B - CENTRE LABEL
+            centre_col = 1
+            logger.warning(f"Could not discover centre column, using default: 1")
         if weight_col is None:
-            weight_col = 2  # Column C - WEIGHT VALUE
+            weight_col = 2
+            logger.warning(f"Could not discover weight column, using default: 2")
         
         logger.info(f"AC DEPT columns: account={account_col}, centre={centre_col}, weight={weight_col}")
         
@@ -302,30 +346,35 @@ class MasterWorkbookParser:
             if not account or account.lower() in ['none', 'total', '']:
                 continue
             
-            # Get centre LABEL from column B (not the weight!)
+            # Get centre LABEL
             centre_val = row[centre_col] if centre_col < len(row) else None
             if centre_val is None or str(centre_val).startswith('#'):
-                logger.debug(f"Row {row_idx}: account {account} has no centre label in column {centre_col}")
                 continue
             
             centre = str(centre_val).strip()
             if not centre or centre.lower() in ['none', '']:
-                logger.debug(f"Row {row_idx}: account {account} has empty centre label")
                 continue
             
-            # Get weight VALUE from column C
+            # CRITICAL: Validate that centre is not a number!
+            try:
+                float(centre)
+                # If this succeeds, centre is numeric - this is WRONG
+                logger.warning(f"Row {row_idx}: account {account} has NUMERIC centre '{centre}' - skipping (likely wrong column)")
+                continue
+            except (ValueError, TypeError):
+                # Good - centre is not a pure number
+                pass
+            
+            # Get weight VALUE
             weight_val = row[weight_col] if weight_col < len(row) else None
             if weight_val is None or str(weight_val).startswith('#'):
-                logger.debug(f"Row {row_idx}: account {account} centre {centre} has no weight")
                 continue
             
             try:
                 weight = float(weight_val)
                 if weight <= 0:
-                    logger.debug(f"Row {row_idx}: account {account} centre {centre} has non-positive weight {weight}")
                     continue
             except (ValueError, TypeError):
-                logger.debug(f"Row {row_idx}: account {account} centre {centre} has invalid weight {weight_val}")
                 continue
             
             # Add to account group
@@ -353,7 +402,7 @@ class MasterWorkbookParser:
                 for e in entries
             ]
             
-            logger.info(f"Account {account}: {len(entries)} centres, total weight {total_weight:.2f}")
+            logger.info(f"Account {account}: {len(entries)} centres ({', '.join(e['centre'] for e in entries)}), total weight {total_weight:.2f}")
         
         return allocations
     

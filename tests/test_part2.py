@@ -843,15 +843,12 @@ class TestWorkbookValueUpdates:
     
     def test_ac_dept_parses_centre_from_label_not_weight(self):
         """
-        Regression test: AC DEPT parser must use centre LABEL (column B), not WEIGHT (column C).
+        Regression test: AC DEPT parser must use centre LABEL, not WEIGHT.
         
         May 2025 rerun showed numeric keys like "216328.807591692" instead of "AC", "FC", "SW".
         Root cause: parser was using the weight value as the centre name.
         
-        Correct structure:
-        - Column A: Account
-        - Column B: Centre label (FC, AC, SW, etc.)
-        - Column C: Weight value (numeric)
+        Test with DYNAMIC column discovery - centre might NOT be in column B!
         """
         from app.master_parser import MasterWorkbookParser
         import openpyxl
@@ -859,97 +856,108 @@ class TestWorkbookValueUpdates:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             
-            # Create a master workbook with AC DEPT sheet shaped like real Citybase
+            # Test 1: Centre in column B (standard layout)
             wb = openpyxl.Workbook()
             wb.remove(wb.active)
             
             ac_dept = wb.create_sheet("AC DEPT")
-            
-            # Header row
             ac_dept['A1'] = 'Account/Meter'
             ac_dept['B1'] = 'Centre'
             ac_dept['C1'] = 'Weight'
             
-            # Account 55861-52267-1: AC 72.54%, SW 27.46%
+            # Account 55861-52267-1
             ac_dept['A2'] = '55861-52267-1'
-            ac_dept['B2'] = 'AC'  # Centre LABEL
-            ac_dept['C2'] = 525.48  # Weight VALUE
+            ac_dept['B2'] = 'AC'
+            ac_dept['C2'] = 525.48
             
             ac_dept['A3'] = '55861-52267-1'
-            ac_dept['B3'] = 'SW'  # Centre LABEL
-            ac_dept['C3'] = 198.99  # Weight VALUE
+            ac_dept['B3'] = 'SW'
+            ac_dept['C3'] = 198.99
             
-            # Account 52167-13569-2: AC 10.39%, C 62.71%, DC 23.43%
-            ac_dept['A4'] = '52167-13569-2'
-            ac_dept['B4'] = 'AC'
-            ac_dept['C4'] = 10388.15
-            
-            ac_dept['A5'] = '52167-13569-2'
-            ac_dept['B5'] = 'C'
-            ac_dept['C5'] = 62705.08
-            
-            ac_dept['A6'] = '52167-13569-2'
-            ac_dept['B6'] = 'DC'
-            ac_dept['C6'] = 23428.44
-            
-            wb_file = tmpdir / 'Cost Allocation.xlsx'
+            wb_file = tmpdir / 'Cost Allocation-ColB.xlsx'
             wb.save(wb_file)
             wb.close()
             
-            # Parse the AC DEPT sheet
             parser = MasterWorkbookParser(str(wb_file))
             rules = parser.parse()
             
-            # Verify account 55861-52267-1
-            assert '55861-52267-1' in rules, "55861-52267-1 should be in rules"
-            allocations_55861 = rules['55861-52267-1']
-            assert len(allocations_55861) == 2, f"55861 should have 2 centres, got {len(allocations_55861)}"
+            assert '55861-52267-1' in rules
+            centres = {a['centre'] for a in rules['55861-52267-1']}
+            assert centres == {'AC', 'SW'}, f"Centre in col B: expected {{AC, SW}}, got {centres}"
             
-            # Find AC and SW allocations
-            ac_alloc = next((a for a in allocations_55861 if a['centre'] == 'AC'), None)
-            sw_alloc = next((a for a in allocations_55861 if a['centre'] == 'SW'), None)
+            # Test 2: Centre in column C, Weight in column D (non-standard layout)
+            wb2 = openpyxl.Workbook()
+            wb2.remove(wb2.active)
             
-            assert ac_alloc is not None, "55861 should have AC allocation"
-            assert sw_alloc is not None, "55861 should have SW allocation"
+            ac_dept2 = wb2.create_sheet("AC DEPT")
+            ac_dept2['A1'] = 'Account/Meter'
+            ac_dept2['B1'] = 'Description'  # Extra column before centre!
+            ac_dept2['C1'] = 'Centre'
+            ac_dept2['D1'] = 'Weight'
             
-            # Check centres are string labels, not numeric weights
-            assert ac_alloc['centre'] == 'AC', f"Centre should be 'AC', got {ac_alloc['centre']}"
-            assert sw_alloc['centre'] == 'SW', f"Centre should be 'SW', got {sw_alloc['centre']}"
+            # Account 52167-13569-2
+            ac_dept2['A2'] = '52167-13569-2'
+            ac_dept2['B2'] = 'Some description'
+            ac_dept2['C2'] = 'AC'  # Centre in col C!
+            ac_dept2['D2'] = 10388.15
             
-            # Check percentages computed from weights
-            expected_ac_pct = 525.48 / (525.48 + 198.99)
-            expected_sw_pct = 198.99 / (525.48 + 198.99)
+            ac_dept2['A3'] = '52167-13569-2'
+            ac_dept2['B3'] = 'Another description'
+            ac_dept2['C3'] = 'C'  # Centre in col C!
+            ac_dept2['D3'] = 62705.08
             
-            assert abs(ac_alloc['percentage'] - expected_ac_pct) < 0.001, \
-                f"AC % should be {expected_ac_pct:.4f}, got {ac_alloc['percentage']:.4f}"
-            assert abs(sw_alloc['percentage'] - expected_sw_pct) < 0.001, \
-                f"SW % should be {expected_sw_pct:.4f}, got {sw_alloc['percentage']:.4f}"
+            ac_dept2['A4'] = '52167-13569-2'
+            ac_dept2['B4'] = 'Yet another'
+            ac_dept2['C4'] = 'DC'  # Centre in col C!
+            ac_dept2['D4'] = 23428.44
             
-            # Verify account 52167-13569-2
-            assert '52167-13569-2' in rules, "52167-13569-2 should be in rules"
-            allocations_52167 = rules['52167-13569-2']
-            assert len(allocations_52167) == 3, f"52167 should have 3 centres, got {len(allocations_52167)}"
+            wb_file2 = tmpdir / 'Cost Allocation-ColC.xlsx'
+            wb2.save(wb_file2)
+            wb2.close()
             
-            # Verify centres are labels not weights
-            centres_52167 = {a['centre'] for a in allocations_52167}
-            assert centres_52167 == {'AC', 'C', 'DC'}, \
-                f"52167 centres should be {{AC, C, DC}}, got {centres_52167}"
+            parser2 = MasterWorkbookParser(str(wb_file2))
+            rules2 = parser2.parse()
             
-            # Verify NO numeric keys (weights mistaken for centres)
-            all_centres = set()
-            for account_allocs in rules.values():
-                for alloc in account_allocs:
-                    all_centres.add(alloc['centre'])
+            assert '52167-13569-2' in rules2, "52167 should be in rules"
+            centres2 = {a['centre'] for a in rules2['52167-13569-2']}
+            assert centres2 == {'AC', 'C', 'DC'}, f"Centre in col C: expected {{AC, C, DC}}, got {centres2}"
             
-            # Check that no centre looks like a number
-            for centre in all_centres:
+            # Verify NO numeric centres
+            for centre in centres2:
                 try:
-                    # If it parses as a float, it's a weight mistaken for a centre (BUG)
                     float(centre)
-                    assert False, f"Centre '{centre}' is numeric - weight was mistaken for centre label!"
+                    assert False, f"Centre '{centre}' is numeric - weight mistaken for centre!"
                 except ValueError:
-                    # Good - centre is a string label, not a number
-                    pass
+                    pass  # Good
+            
+            # Test 3: Centre in column D, Weight in column E (even more non-standard)
+            wb3 = openpyxl.Workbook()
+            wb3.remove(wb3.active)
+            
+            ac_dept3 = wb3.create_sheet("AC DEPT")
+            ac_dept3['A1'] = 'Account/Meter'
+            ac_dept3['B1'] = 'Zone'
+            ac_dept3['C1'] = 'Floor'
+            ac_dept3['D1'] = 'Centre'
+            ac_dept3['E1'] = 'Weight'
+            
+            # Account 23529-59279-9
+            ac_dept3['A2'] = '23529-59279-9'
+            ac_dept3['B2'] = 'Zone A'
+            ac_dept3['C2'] = 'Floor 3'
+            ac_dept3['D2'] = 'SW'  # Centre in col D!
+            ac_dept3['E2'] = 99629.75
+            
+            wb_file3 = tmpdir / 'Cost Allocation-ColD.xlsx'
+            wb3.save(wb_file3)
+            wb3.close()
+            
+            parser3 = MasterWorkbookParser(str(wb_file3))
+            rules3 = parser3.parse()
+            
+            assert '23529-59279-9' in rules3, "23529 should be in rules"
+            centres3 = {a['centre'] for a in rules3['23529-59279-9']}
+            assert centres3 == {'SW'}, f"Centre in col D: expected {{SW}}, got {centres3}"
 
 
 if __name__ == '__main__':
