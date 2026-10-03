@@ -403,6 +403,196 @@ class TestWorkbookValueUpdates:
             assert grid_sheet_updated['A1'].font.bold == True
             
             wb_updated.close()
+    
+    def test_meter_past_column_10_regression(self):
+        """
+        Regression test: Meter 6681757 is at row 31 in columns past column 10.
+        
+        Golden May shows meter at BR31/BS31 (columns 70/71).
+        App initially failed because search stopped at column 10.
+        """
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create Elect Charge sheet shaped like real Citybase workbook
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            elect_sheet = wb.create_sheet("Elect Charge")
+            
+            # Place meter 6681757 at row 31, with readings in columns BR/BS (70/71)
+            # Column BR = 70, BS = 71, BQ = 69 (delta formula)
+            elect_sheet.cell(row=31, column=1).value = '6681757'  # Meter number in column A or nearby
+            elect_sheet.cell(row=31, column=70).value = 95966.6   # BR31 - Previous (April)
+            elect_sheet.cell(row=31, column=71).value = 96323.1   # BS31 - Present (April)
+            elect_sheet.cell(row=31, column=69).value = '=BS31-BR31'  # BQ31 - Delta formula
+            
+            # Add headers in row 30
+            elect_sheet.cell(row=30, column=70).value = 'Previous'
+            elect_sheet.cell(row=30, column=71).value = 'Present'
+            elect_sheet.cell(row=30, column=69).value = 'Delta'
+            
+            wb_file = out_dir / 'Cost Allocation.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Update with May readings
+            meter_log = {
+                'meter_no': '6681757',
+                'previous': 96323.1,
+                'present': 96504.6,
+            }
+            
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_allocation_workbook(
+                wb_file,
+                allocations=[],
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log=meter_log
+            )
+            
+            # Verify readings updated
+            wb_updated = openpyxl.load_workbook(wb_file)
+            elect_sheet_updated = wb_updated['Elect Charge']
+            
+            assert elect_sheet_updated.cell(row=31, column=70).value == 96323.1, \
+                f"BR31 Previous should be 96323.1, got {elect_sheet_updated.cell(row=31, column=70).value}"
+            assert elect_sheet_updated.cell(row=31, column=71).value == 96504.6, \
+                f"BS31 Present should be 96504.6, got {elect_sheet_updated.cell(row=31, column=71).value}"
+            
+            # Delta should remain as formula (not overwritten)
+            delta_cell = elect_sheet_updated.cell(row=31, column=69)
+            assert isinstance(delta_cell.value, str) and delta_cell.value.startswith('='), \
+                f"BQ31 Delta should remain formula, got {delta_cell.value}"
+            
+            wb_updated.close()
+    
+    def test_year_grid_matches_billing_year_regression(self):
+        """
+        Regression test: Year-grid sheet must match billing year.
+        
+        Golden May has "01-12 2025". App initially picked "01-12 2022" (first match).
+        """
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create Cost Sheet with multiple 01-12 sheets (older years)
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            # Add old year-grid sheets (should NOT be picked)
+            old_sheet_2022 = wb.create_sheet("01-12 2022")
+            old_sheet_2022['A1'] = 'Cost Centre'
+            old_sheet_2022['F1'] = 'May'
+            old_sheet_2022['A2'] = 'FC'
+            old_sheet_2022['F2'] = 0  # Should NOT be updated
+            
+            old_sheet_2023 = wb.create_sheet("01-12 2023")
+            old_sheet_2023['A1'] = 'Cost Centre'
+            old_sheet_2023['F1'] = 'May'
+            old_sheet_2023['A2'] = 'FC'
+            old_sheet_2023['F2'] = 0  # Should NOT be updated
+            
+            # Add current year-grid sheet (SHOULD be picked)
+            current_sheet = wb.create_sheet("01-12 2025")
+            current_sheet['A1'] = 'Cost Centre'
+            current_sheet['F1'] = 'May'
+            current_sheet['A2'] = 'FC'
+            current_sheet['A3'] = 'AC'
+            current_sheet['F2'] = None  # Should be updated
+            current_sheet['F3'] = None
+            
+            wb_file = out_dir / 'Cost Sheet-2025-05.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Update with May allocations
+            allocations = [
+                {'centre': 'FC', 'amount': 70610.00, 'account': 'test1'},
+                {'centre': 'AC', 'amount': 422972.67, 'account': 'test2'},
+            ]
+            
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_sheet_workbook(
+                wb_file,
+                allocations=allocations,
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log={}
+            )
+            
+            # Verify only the 2025 sheet was updated
+            wb_updated = openpyxl.load_workbook(wb_file)
+            
+            # 2022 and 2023 should remain 0
+            assert wb_updated['01-12 2022']['F2'].value == 0, "Old 2022 sheet should not be updated"
+            assert wb_updated['01-12 2023']['F2'].value == 0, "Old 2023 sheet should not be updated"
+            
+            # 2025 should have new values
+            assert wb_updated['01-12 2025']['F2'].value == 70610.00, \
+                f"2025 FC May should be 70610.00, got {wb_updated['01-12 2025']['F2'].value}"
+            assert wb_updated['01-12 2025']['F3'].value == 422972.67, \
+                f"2025 AC May should be 422972.67, got {wb_updated['01-12 2025']['F3'].value}"
+            
+            wb_updated.close()
+    
+    def test_title_cells_not_overwritten_regression(self):
+        """
+        Regression test: Original title cells must not be overwritten.
+        
+        Golden keeps original 2008 title. App initially overwrote AC DEPT!A1 to "Cost Allocation - 2025-05".
+        """
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create Cost Allocation workbook with original 2008 title
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            ac_dept_sheet = wb.create_sheet("AC DEPT")
+            ac_dept_sheet['A1'] = 'Metropolis AC DEPT 2008'  # Original title from 2008
+            
+            elect_sheet = wb.create_sheet("Elect Charge")
+            elect_sheet['A1'] = 'Electricity Charges - Original Title'
+            
+            wb_file = out_dir / 'Cost Allocation.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Update workbook
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_allocation_workbook(
+                wb_file,
+                allocations=[],
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log={}
+            )
+            
+            # Verify original titles preserved
+            wb_updated = openpyxl.load_workbook(wb_file)
+            
+            assert wb_updated['AC DEPT']['A1'].value == 'Metropolis AC DEPT 2008', \
+                f"AC DEPT A1 should preserve original title, got {wb_updated['AC DEPT']['A1'].value}"
+            assert wb_updated['Elect Charge']['A1'].value == 'Electricity Charges - Original Title', \
+                f"Elect Charge A1 should preserve original title, got {wb_updated['Elect Charge']['A1'].value}"
+            
+            wb_updated.close()
 
 
 if __name__ == '__main__':

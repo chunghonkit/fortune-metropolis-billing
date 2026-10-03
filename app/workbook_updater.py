@@ -183,13 +183,8 @@ class WorkbookUpdater:
             # If it's .xls and fails, just log and return
             return workbook_path
         
-        # Update title/header to show current month
-        # Try to find and update any sheet that might have the main title
-        for sheet in wb.worksheets:
-            # Check A1 for title
-            if sheet['A1'].value and 'Cost Allocation' in str(sheet['A1'].value):
-                sheet['A1'] = f"Cost Allocation - {billing_month}"
-                logger.info(f"Updated title in sheet '{sheet.title}' A1")
+        # DO NOT update title/header cells - preserve original titles from 2008
+        # The golden workbooks keep their original titles unchanged
         
         # Find Elect Charge sheet (check-meter 6681757)
         elect_charge_sheet = None
@@ -206,8 +201,8 @@ class WorkbookUpdater:
             meter_no = meter_log.get('meter_no', '6681757')
             meter_row = None
             
-            # Search for meter number in the sheet
-            for row in elect_charge_sheet.iter_rows(min_row=1, max_row=100, min_col=1, max_col=10):
+            # Search for meter number in the sheet - extend search to ALL columns, not just 10
+            for row in elect_charge_sheet.iter_rows(min_row=1, max_row=100, min_col=1, max_col=200):
                 for cell in row:
                     if cell.value and str(meter_no) in str(cell.value):
                         meter_row = cell.row
@@ -229,31 +224,42 @@ class WorkbookUpdater:
                 present_col = None
                 delta_col = None
                 
-                # Check a few rows above meter_row for headers
+                # Check a few rows above meter_row for headers - search ALL columns
                 for header_row_idx in range(max(1, meter_row - 5), meter_row):
                     row_cells = list(elect_charge_sheet.iter_rows(
                         min_row=header_row_idx, max_row=header_row_idx, 
-                        min_col=1, max_col=100, values_only=False
+                        min_col=1, max_col=200, values_only=False
                     ))[0]
                     
                     for cell in row_cells:
                         if cell.value:
                             val_lower = str(cell.value).lower()
-                            if 'previous' in val_lower or 'prev' in val_lower:
+                            if 'previous' in val_lower or 'prev' in val_lower or '上期' in val_lower:
                                 prev_col = cell.column
-                            elif 'present' in val_lower:
+                                logger.info(f"Found Previous column: {openpyxl.utils.get_column_letter(prev_col)}")
+                            elif 'present' in val_lower or '今期' in val_lower:
                                 present_col = cell.column
-                            elif 'delta' in val_lower or 'diff' in val_lower:
+                                logger.info(f"Found Present column: {openpyxl.utils.get_column_letter(present_col)}")
+                            elif 'delta' in val_lower or 'diff' in val_lower or '度數' in val_lower:
                                 delta_col = cell.column
+                                logger.info(f"Found Delta column: {openpyxl.utils.get_column_letter(delta_col)}")
                 
                 # If we found the columns, write the values
                 if prev_col and present_col:
                     elect_charge_sheet.cell(row=meter_row, column=prev_col).value = meter_log['previous']
                     elect_charge_sheet.cell(row=meter_row, column=present_col).value = meter_log['present']
                     
+                    # Check if delta cell has a formula - if so, don't overwrite it
                     if delta_col:
-                        delta = round(meter_log['present'] - meter_log['previous'], 1)
-                        elect_charge_sheet.cell(row=meter_row, column=delta_col).value = delta
+                        delta_cell = elect_charge_sheet.cell(row=meter_row, column=delta_col)
+                        # If it's a formula (like =BS31-BR31), leave it alone
+                        # Otherwise, write the delta value
+                        if not (delta_cell.value and isinstance(delta_cell.value, str) and delta_cell.value.startswith('=')):
+                            delta = round(meter_log['present'] - meter_log['previous'], 1)
+                            delta_cell.value = delta
+                            logger.info(f"Wrote delta value {delta}")
+                        else:
+                            logger.info(f"Delta cell has formula, leaving it to auto-calculate")
                     
                     logger.info(f"Updated meter readings at row {meter_row}: "
                               f"prev={meter_log['previous']}, present={meter_log['present']}")
@@ -314,26 +320,28 @@ class WorkbookUpdater:
             logger.error(f"Failed to load Cost Sheet workbook: {e}")
             return workbook_path
         
-        # Update title/header to show current month
-        for sheet in wb.worksheets:
-            if sheet['A1'].value and 'Cost Sheet' in str(sheet['A1'].value):
-                sheet['A1'] = f"Cost Sheet - {billing_month}"
-                logger.info(f"Updated title in sheet '{sheet.title}' A1")
+        # DO NOT update title/header cells - preserve original titles
+        # The golden workbooks keep their original titles unchanged
         
-        # Find year-grid sheet (might contain "01-12", year, or be named after year range)
+        # Find year-grid sheet matching the billing year (e.g., "01-12 2025")
         year_grid_sheet = None
         billing_year = billing_month.split('-')[0]
         
         for sheet in wb.worksheets:
-            sheet_name_lower = sheet.title.lower()
-            # Look for sheets with year range like "01-12 2025" or just the year
-            if ('01-12' in sheet_name_lower or 
-                billing_year in sheet.title or
-                'year' in sheet_name_lower or
-                'grid' in sheet_name_lower):
+            sheet_name = sheet.title
+            # Look for sheets with "01-12" AND the billing year
+            if '01-12' in sheet_name and billing_year in sheet_name:
                 year_grid_sheet = sheet
-                logger.info(f"Found year-grid sheet: {sheet.title}")
+                logger.info(f"Found year-grid sheet matching {billing_year}: {sheet.title}")
                 break
+        
+        # If no exact match, try just "01-12" as fallback (but log warning)
+        if not year_grid_sheet:
+            for sheet in wb.worksheets:
+                if '01-12' in sheet.title.lower():
+                    year_grid_sheet = sheet
+                    logger.warning(f"Using fallback year-grid sheet (no {billing_year} match): {sheet.title}")
+                    break
         
         if year_grid_sheet:
             # Calculate which column for this month (1=Jan=B, 2=Feb=C, ..., 5=May=F)
