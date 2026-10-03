@@ -249,6 +249,11 @@ class MasterWorkbookParser:
             # "Office Accommodation - Chiller Plant" -> "AO"
             centre_code = self._extract_centre_code_from_long_name(centre_full)
             
+            # Skip if no valid centre code extracted
+            if not centre_code or centre_code.strip() == '':
+                logger.debug(f"Row {row_idx}: No valid centre code from '{centre_full}' - SKIPPING")
+                continue
+            
             # CRITICAL: Validate centre is not numeric
             try:
                 float(centre_code)
@@ -338,50 +343,59 @@ class MasterWorkbookParser:
         if not rows:
             return allocations
         
-        # Find header row - look for "Percentage:" and "Allocated Cost Centre:"
+        # Find header row - look for row with "Percentage:" or "Elect. Meter No.:"
         header_row_idx = None
         for idx, row in enumerate(rows[:10]):
-            if any('percentage' in str(cell).lower() for cell in row if cell):
+            if not row:
+                continue
+            # Check if this row has distinctive header keywords
+            row_str_lower = ' '.join(str(cell or '').lower() for cell in row)
+            if 'percentage:' in row_str_lower or 'elect. meter no' in row_str_lower:
                 header_row_idx = idx
-                logger.info(f"Found header row at index {idx}")
+                logger.info(f"Found AC DEPT header row at index {idx}")
                 break
         
         if header_row_idx is None:
-            logger.warning("Could not find header row with 'Percentage:' - trying allocation sheet parser as fallback")
-            # Fall back to the allocation sheet parser for test fixtures
+            logger.warning("Could not find AC DEPT header row - trying allocation sheet parser as fallback")
             return self._parse_allocation_sheet_openpyxl(sheet)
         
         # Find column positions from headers
-        headers = [str(cell).lower() if cell else '' for cell in rows[header_row_idx]]
+        headers = [str(cell) if cell else '' for cell in rows[header_row_idx]]
         
         account_col = None
-        percentage_col = None
+        charge_col = None  # Column C or first "Charge" column
         centre_col = None
         
         for idx, h in enumerate(headers):
-            if 'meter' in h or 'account' in h or 'acct' in h:
+            h_lower = h.lower()
+            if ('meter' in h_lower or 'account' in h_lower or 'acct' in h_lower) and account_col is None:
                 account_col = idx
                 logger.info(f"Found account column: {idx}")
-            elif 'percentage' in h:
-                percentage_col = idx
-                logger.info(f"Found percentage column: {idx}")
-            elif 'allocated' in h and 'centre' in h:
+            elif 'charge' in h_lower and 'allocated' not in h_lower and charge_col is None:
+                charge_col = idx
+                logger.info(f"Found charge column: {idx} ({h})")
+            elif 'allocated' in h_lower and 'centre' in h_lower and centre_col is None:
                 centre_col = idx
                 logger.info(f"Found centre column: {idx}")
         
-        if percentage_col is None or centre_col is None:
-            logger.warning(f"Missing columns: percentage_col={percentage_col}, centre_col={centre_col}")
+        # Fallback to Column C (index 2) if no "Charge" header found
+        if charge_col is None:
+            charge_col = 2
+            logger.warning(f"No charge column found in headers, using Column C (index 2)")
+        
+        if centre_col is None:
+            logger.warning("Centre column not found, cannot parse AC DEPT")
             return allocations
         
         if account_col is None:
             account_col = 0
-            logger.warning("Account column not found in headers, using column 0")
+            logger.warning("Account column not found, using column 0")
         
-        logger.info(f"AC DEPT columns: account={account_col}, percentage={percentage_col}, centre={centre_col}")
+        logger.info(f"AC DEPT columns: account={account_col}, charge={charge_col}, centre={centre_col}")
         
-        # Parse data rows - track current account across rows
+        # Parse data rows - group by account
+        account_groups = {}  # account -> [(charge, centre_full), ...]
         current_account = None
-        account_allocations = []
         
         for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             if not row or all(cell is None for cell in row):
@@ -390,12 +404,6 @@ class MasterWorkbookParser:
             # Check for new account in column A
             account_val = row[account_col] if account_col < len(row) else None
             if account_val and str(account_val).strip() and not str(account_val).startswith('#'):
-                # New account found - save previous account if exists
-                if current_account and account_allocations:
-                    allocations[current_account] = account_allocations
-                    logger.info(f"Saved account {current_account}: {len(account_allocations)} centres")
-                
-                # Start new account
                 account_str = str(account_val).strip()
                 # Remove trailing letters in parentheses like "(A)" or "(B)"
                 import re
@@ -405,26 +413,28 @@ class MasterWorkbookParser:
                 else:
                     current_account = account_str
                 
-                account_allocations = []
+                if current_account not in account_groups:
+                    account_groups[current_account] = []
+                
                 logger.debug(f"Row {row_idx}: New account {current_account}")
             
             # Skip if no current account
             if not current_account:
                 continue
             
-            # Get percentage from column N
-            pct_val = row[percentage_col] if percentage_col < len(row) else None
-            if pct_val is None or str(pct_val).startswith('#'):
+            # Get charge from charge column
+            charge_val = row[charge_col] if charge_col < len(row) else None
+            if charge_val is None or str(charge_val).startswith('#'):
                 continue
             
             try:
-                pct = float(pct_val)
-                if pct <= 0:
+                charge = float(charge_val)
+                if charge <= 0:
                     continue
             except (ValueError, TypeError):
                 continue
             
-            # Get centre name from column O
+            # Get centre name
             centre_val = row[centre_col] if centre_col < len(row) else None
             if centre_val is None or str(centre_val).startswith('#'):
                 continue
@@ -433,43 +443,59 @@ class MasterWorkbookParser:
             if not centre_full:
                 continue
             
-            # Extract short code from long name
-            # "AC - Commercial Air Conditioning" -> "AC"
-            # "Hotel / Commercial / SA" -> ["C", "SA"]
-            centre_code = self._extract_centre_code_from_long_name(centre_full)
-            
-            # CRITICAL: Validate centre is not numeric
-            try:
-                float(centre_code)
-                logger.warning(f"Row {row_idx}: NUMERIC centre '{centre_code}' from '{centre_full}' - SKIPPING")
-                continue
-            except (ValueError, TypeError):
-                pass  # Good - not numeric
-            
-            # Handle shared allocations (centre codes with "/")
-            # Example: "C/SA" means split percentage evenly across C and SA
-            if '/' in centre_code:
-                centre_codes = [c.strip() for c in centre_code.split('/')]
-                split_pct = pct / len(centre_codes)
-                
-                for code in centre_codes:
-                    account_allocations.append({
-                        'centre': code,
-                        'percentage': split_pct
-                    })
-                    logger.debug(f"Row {row_idx}: account {current_account}, centre {code} ({centre_full} split), pct {split_pct:.4f}")
-            else:
-                # Single centre
-                account_allocations.append({
-                    'centre': centre_code,
-                    'percentage': pct
-                })
-                logger.debug(f"Row {row_idx}: account {current_account}, centre {centre_code} ({centre_full}), pct {pct:.4f}")
+            # Add to account group
+            account_groups[current_account].append((charge, centre_full))
+            logger.debug(f"Row {row_idx}: account {current_account}, charge {charge:.2f}, centre {centre_full}")
         
-        # Save last account
-        if current_account and account_allocations:
-            allocations[current_account] = account_allocations
-            logger.info(f"Saved account {current_account}: {len(account_allocations)} centres")
+        # Compute percentages for each account group from charges
+        for account, entries in account_groups.items():
+            total_charge = sum(charge for charge, _ in entries)
+            if total_charge == 0:
+                logger.warning(f"Account {account} has zero total charge")
+                continue
+            
+            account_allocations = []
+            for charge, centre_full in entries:
+                pct = charge / total_charge
+                
+                # Extract short code
+                centre_code = self._extract_centre_code_from_long_name(centre_full)
+                
+                # Skip if no valid centre code extracted
+                if not centre_code or centre_code.strip() == '':
+                    logger.debug(f"Account {account}: No valid centre code from '{centre_full}' - SKIPPING")
+                    continue
+                
+                # CRITICAL: Validate centre is not numeric
+                try:
+                    float(centre_code)
+                    logger.warning(f"Account {account}: NUMERIC centre '{centre_code}' from '{centre_full}' - SKIPPING")
+                    continue
+                except (ValueError, TypeError):
+                    pass  # Good - not numeric
+                
+                # Handle shared allocations (centre codes with "/")
+                if '/' in centre_code:
+                    centre_codes = [c.strip() for c in centre_code.split('/')]
+                    split_pct = pct / len(centre_codes)
+                    
+                    for code in centre_codes:
+                        account_allocations.append({
+                            'centre': code,
+                            'percentage': split_pct
+                        })
+                        logger.debug(f"Account {account}: centre {code} ({centre_full} split), pct {split_pct:.4f}, charge {charge * split_pct:.2f}")
+                else:
+                    # Single centre
+                    account_allocations.append({
+                        'centre': centre_code,
+                        'percentage': pct
+                    })
+                    logger.debug(f"Account {account}: centre {centre_code} ({centre_full}), pct {pct:.4f}, charge {charge:.2f}")
+            
+            if account_allocations:
+                allocations[account] = account_allocations
+                logger.info(f"Saved account {account}: {len(account_allocations)} centres, total charge {total_charge:.2f}")
         
         return allocations
     
@@ -522,9 +548,16 @@ class MasterWorkbookParser:
                 elif 'Office' in seg and 'O' not in matched_codes:
                     # Could be O or OC or AO - default to O
                     matched_codes.append('O')
+                # Skip non-code segments like "Hotel", "L8 Premises", "Carpark"
+                # These are facility names, not cost centres
             
             if matched_codes:
                 return '/'.join(matched_codes)
+            else:
+                # No recognized codes found in slash-separated name
+                # Return empty to skip this entry
+                logger.warning(f"Slash-separated centre '{centre_full}' has no recognized codes, skipping")
+                return ''
         
         # Check for known keywords without code prefix
         centre_lower = centre_full.lower()

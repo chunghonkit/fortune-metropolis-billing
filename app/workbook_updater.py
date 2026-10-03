@@ -440,7 +440,7 @@ class WorkbookUpdater:
                 if cell.value:
                     cell_val = str(cell.value).strip().upper()
                     # Check if this cell contains a cost centre code
-                    for centre in ['FC', 'AC', 'SW', 'DC', 'OC', 'AO', 'CP', 'SA', 'C']:
+                    for centre in ['FC', 'AC', 'SW', 'DC', 'OC', 'AO', 'CP', 'SA', 'C', 'O']:
                         # Match exact or as part of longer description
                         if cell_val == centre or cell_val.startswith(centre + ' ') or cell_val.startswith(centre + '-'):
                             centre_rows[centre] = cell.row
