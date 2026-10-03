@@ -55,11 +55,11 @@ class TestWorkbookCopy:
             prev_out_dir = prev_month_dir / 'out'
             prev_out_dir.mkdir(parents=True, exist_ok=True)
             
-            # Create a mock source workbook
+            # Create a mock source workbook with real Citybase-style name
             source_wb = openpyxl.Workbook()
             source_sheet = source_wb.active
             source_sheet['A1'] = 'Original Value'
-            source_file = prev_out_dir / 'Cost Sheet.xlsx'
+            source_file = prev_out_dir / 'Cost Sheet-2025-03.xls'
             source_wb.save(source_file)
             source_wb.close()
             
@@ -71,8 +71,7 @@ class TestWorkbookCopy:
             updater = WorkbookUpdater(tmpdir)
             copied_files = updater.copy_previous_month_workbooks(
                 '2025-04',
-                '2025-03',
-                {'cost_sheet': 'Cost Sheet.xlsx'}
+                '2025-03'
             )
             
             # Verify source file is unchanged
@@ -85,8 +84,8 @@ class TestWorkbookCopy:
             assert copied_files['cost_sheet'].exists()
             assert copied_files['cost_sheet'].parent == curr_month_dir / 'out'
             
-            # Verify copy has same content initially
-            assert copied_files['cost_sheet'].read_bytes() == original_content
+            # Verify copy has correct current-month name
+            assert copied_files['cost_sheet'].name == 'Cost Sheet-2025-04.xls'
     
     def test_copy_creates_output_directory(self):
         """Test that copying creates the out/ directory if it doesn't exist"""
@@ -101,7 +100,7 @@ class TestWorkbookCopy:
             prev_month_dir.mkdir(parents=True, exist_ok=True)
             
             source_wb = openpyxl.Workbook()
-            source_file = prev_month_dir / 'Cost Allocation.xlsx'
+            source_file = prev_month_dir / 'Cost Allocation - Electricity 2007-2.xls'
             source_wb.save(source_file)
             source_wb.close()
             
@@ -113,8 +112,7 @@ class TestWorkbookCopy:
             updater = WorkbookUpdater(tmpdir)
             copied_files = updater.copy_previous_month_workbooks(
                 '2025-04',
-                '2025-03',
-                {'cost_allocation': 'Cost Allocation.xlsx'}
+                '2025-03'
             )
             
             # Verify out/ directory was created
@@ -124,6 +122,60 @@ class TestWorkbookCopy:
             # Verify file was copied
             assert 'cost_allocation' in copied_files
             assert copied_files['cost_allocation'].parent == curr_out_dir
+            # Cost Allocation keeps same name (long-lived file)
+            assert copied_files['cost_allocation'].name == 'Cost Allocation - Electricity 2007-2.xls'
+    
+    def test_find_real_citybase_filenames(self):
+        """Test finding real Citybase filenames (.xls, Cost Sheet-YYYY-MM, Cost Allocation - Electricity ...)"""
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            
+            # Create previous month with real Citybase filenames
+            prev_masters_dir = tmpdir / '2025-03' / 'masters'
+            prev_masters_dir.mkdir(parents=True, exist_ok=True)
+            
+            prev_out_dir = tmpdir / '2025-03' / 'out'
+            prev_out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Cost Allocation in masters (long-lived file with 2007-2 name)
+            cost_alloc_wb = openpyxl.Workbook()
+            cost_alloc_file = prev_masters_dir / 'Cost Allocation - Electricity 2007-2.xls'
+            cost_alloc_wb.save(cost_alloc_file)
+            cost_alloc_wb.close()
+            
+            # Cost Sheet in out/ with previous month
+            cost_sheet_wb = openpyxl.Workbook()
+            cost_sheet_file = prev_out_dir / 'Cost Sheet-2025-03.xls'
+            cost_sheet_wb.save(cost_sheet_file)
+            cost_sheet_wb.close()
+            
+            # Copy workbooks
+            updater = WorkbookUpdater(tmpdir)
+            copied_files = updater.copy_previous_month_workbooks(
+                '2025-04',
+                '2025-03'
+            )
+            
+            # Verify both files found
+            assert 'cost_allocation' in copied_files
+            assert 'cost_sheet' in copied_files
+            
+            curr_out_dir = tmpdir / '2025-04' / 'out'
+            
+            # Verify Cost Allocation copied with same name
+            assert copied_files['cost_allocation'].parent == curr_out_dir
+            assert copied_files['cost_allocation'].name == 'Cost Allocation - Electricity 2007-2.xls'
+            
+            # Verify Cost Sheet copied with current month in name
+            assert copied_files['cost_sheet'].parent == curr_out_dir
+            assert copied_files['cost_sheet'].name == 'Cost Sheet-2025-04.xls'
+            
+            # Verify source files unchanged
+            assert cost_alloc_file.exists()
+            assert cost_sheet_file.exists()
 
 
 class TestWorkbookUpdate:

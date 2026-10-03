@@ -34,25 +34,26 @@ class WorkbookUpdater:
         self,
         current_month: str,  # YYYY-MM
         previous_month: str,  # YYYY-MM
-        template_names: Optional[Dict[str, str]] = None
     ) -> Dict[str, Path]:
         """
         Copy previous month's workbooks to current month's out/ directory.
         
+        Handles real Citybase filenames:
+        - Cost Allocation - Electricity 2007-2.xls (long-lived master)
+        - Cost Sheet-2025-03.xls (contains previous month)
+        
+        Looks in:
+        - ~/Metropolis/{previous}/masters/
+        - ~/Metropolis/{previous}/out/
+        - ~/Metropolis/{current}/masters/
+        
         Args:
             current_month: Current billing month (YYYY-MM)
             previous_month: Previous month (YYYY-MM)
-            template_names: Optional dict with 'cost_sheet' and 'cost_allocation' filenames
         
         Returns:
             Dict mapping workbook type to copied file path
         """
-        if template_names is None:
-            template_names = {
-                'cost_sheet': 'Cost Sheet.xlsx',
-                'cost_allocation': 'Cost Allocation.xlsx'
-            }
-        
         current_month_dir = self.metropolis_root / current_month
         previous_month_dir = self.metropolis_root / previous_month
         
@@ -62,31 +63,82 @@ class WorkbookUpdater:
         
         copied_files = {}
         
-        # Copy Cost Sheet
-        for wb_type, filename in template_names.items():
-            # Try multiple source locations
-            source_candidates = [
-                previous_month_dir / 'out' / filename,
-                previous_month_dir / 'masters' / filename,
-                previous_month_dir / filename,
-            ]
-            
-            source_file = None
-            for candidate in source_candidates:
-                if candidate.exists():
-                    source_file = candidate
-                    break
-            
-            if not source_file:
-                logger.warning(f"Could not find {filename} in previous month {previous_month}")
+        # Search locations in priority order
+        search_dirs = [
+            previous_month_dir / 'out',
+            previous_month_dir / 'masters',
+            current_month_dir / 'masters',
+        ]
+        
+        # Find Cost Allocation workbook (long-lived file)
+        cost_allocation_file = None
+        for search_dir in search_dirs:
+            if not search_dir.exists():
                 continue
-            
-            # Copy to current month's out/ directory
-            dest_file = out_dir / filename
-            shutil.copy2(source_file, dest_file)
-            
-            logger.info(f"Copied {filename}: {source_file} -> {dest_file}")
-            copied_files[wb_type] = dest_file
+            # Look for files containing "Cost Allocation" with .xls or .xlsx
+            for pattern in ['*Cost Allocation*.xls', '*Cost Allocation*.xlsx']:
+                matches = list(search_dir.glob(pattern))
+                if matches:
+                    # Take the first match
+                    cost_allocation_file = matches[0]
+                    logger.info(f"Found Cost Allocation: {cost_allocation_file}")
+                    break
+            if cost_allocation_file:
+                break
+        
+        if cost_allocation_file and cost_allocation_file.exists():
+            # Copy to current month's out/ with same name (long-lived)
+            dest_file = out_dir / cost_allocation_file.name
+            shutil.copy2(cost_allocation_file, dest_file)
+            logger.info(f"Copied Cost Allocation: {cost_allocation_file} -> {dest_file}")
+            copied_files['cost_allocation'] = dest_file
+        else:
+            logger.warning(f"Could not find Cost Allocation workbook")
+        
+        # Find Cost Sheet workbook (contains previous month in name)
+        cost_sheet_file = None
+        for search_dir in search_dirs:
+            if not search_dir.exists():
+                continue
+            # Look for files containing "Cost Sheet" with .xls or .xlsx
+            for pattern in ['*Cost Sheet*.xls', '*Cost Sheet*.xlsx']:
+                matches = list(search_dir.glob(pattern))
+                for match in matches:
+                    # Prefer files that contain the previous month in the name
+                    if previous_month in match.name:
+                        cost_sheet_file = match
+                        logger.info(f"Found Cost Sheet (with month): {cost_sheet_file}")
+                        break
+                if cost_sheet_file:
+                    break
+            if cost_sheet_file:
+                break
+        
+        # If not found with previous month, take any Cost Sheet file
+        if not cost_sheet_file:
+            for search_dir in search_dirs:
+                if not search_dir.exists():
+                    continue
+                for pattern in ['*Cost Sheet*.xls', '*Cost Sheet*.xlsx']:
+                    matches = list(search_dir.glob(pattern))
+                    if matches:
+                        cost_sheet_file = matches[0]
+                        logger.info(f"Found Cost Sheet (generic): {cost_sheet_file}")
+                        break
+                if cost_sheet_file:
+                    break
+        
+        if cost_sheet_file and cost_sheet_file.exists():
+            # Update filename to use current month
+            # Cost Sheet-2025-03.xls -> Cost Sheet-2025-04.xls
+            original_ext = cost_sheet_file.suffix  # .xls or .xlsx
+            dest_name = f"Cost Sheet-{current_month}{original_ext}"
+            dest_file = out_dir / dest_name
+            shutil.copy2(cost_sheet_file, dest_file)
+            logger.info(f"Copied Cost Sheet: {cost_sheet_file} -> {dest_file}")
+            copied_files['cost_sheet'] = dest_file
+        else:
+            logger.warning(f"Could not find Cost Sheet workbook")
         
         return copied_files
     

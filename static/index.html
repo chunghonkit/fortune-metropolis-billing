@@ -1016,8 +1016,56 @@
         }
         
         // Continue to Part 2
-        function continueToPart2() {
-            alert('Part 2 (Master & Allocation) is TODO. Part 1 gate has passed!');
+        async function continueToPart2() {
+            const button = document.getElementById('continueBtn');
+            const banner = document.getElementById('gateBanner');
+            const summary = banner.querySelector('.gate-summary');
+            const errors = document.getElementById('gateErrors');
+            
+            // Disable button and show processing state
+            button.disabled = true;
+            button.textContent = '⏳ Processing month-end...';
+            summary.textContent = 'Copying previous month\'s workbooks and updating with current data...';
+            errors.innerHTML = '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/process-month-end`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    // Success - show updated file paths
+                    button.textContent = '✓ Month-End Complete';
+                    summary.textContent = result.message;
+                    
+                    // Display updated file paths
+                    const filesList = Object.entries(result.updated_files)
+                        .map(([type, path]) => `${type}: ${path}`)
+                        .join('\n');
+                    
+                    errors.innerHTML = `<div class="status-alert success" style="margin-top: 12px;">
+                        <strong>Updated workbooks:</strong><br>
+                        <pre style="margin-top: 8px; font-size: 11px; overflow-x: auto;">${filesList}</pre>
+                    </div>`;
+                } else {
+                    // Error response
+                    button.textContent = '❌ Month-End Failed';
+                    button.disabled = false;
+                    
+                    const errorMsg = result.detail || result.message || 'Unknown error';
+                    summary.textContent = 'Month-end processing failed.';
+                    errors.innerHTML = `<div class="status-alert error">${errorMsg}</div>`;
+                }
+            } catch (error) {
+                // Network or other error
+                button.textContent = '▶️ Continue to Part 2';
+                button.disabled = false;
+                
+                summary.textContent = 'Error processing month-end.';
+                errors.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+            }
         }
     </script>
 </body>
