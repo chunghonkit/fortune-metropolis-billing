@@ -623,25 +623,27 @@ async def process_month_end():
         # 3. Current month's main directory (if not yet moved to out/)
         # 4. masters/ subfolder
         # 5. Test data fallback
+        # The chain reads the previous month, never this month's out/.
+        # June copies May's outputs; May copies the April pair in the month folder.
         master_candidates = [
-            # Previous month locations (PRIORITY - untouched source)
-            metropolis_root / previous_month / 'Cost Allocation - Electricity 2007-2.xls',
-            metropolis_root / previous_month / 'Cost Allocation - Electricity 2007-2.xlsx',
             metropolis_root / previous_month / 'out' / 'Cost Allocation - Electricity 2007-2.xls',
             metropolis_root / previous_month / 'out' / 'Cost Allocation - Electricity 2007-2.xlsx',
+            metropolis_root / previous_month / 'out' / 'Cost Allocation.xls',
+            metropolis_root / previous_month / 'out' / 'Cost Allocation.xlsx',
+            metropolis_root / previous_month / 'Cost Allocation - Electricity 2007-2.xls',
+            metropolis_root / previous_month / 'Cost Allocation - Electricity 2007-2.xlsx',
             metropolis_root / previous_month / 'Cost Allocation.xls',
             metropolis_root / previous_month / 'Cost Allocation.xlsx',
-            # Current month main directory (not out/ - that's being written to!)
+            metropolis_root / previous_month / 'masters' / 'Cost Allocation - Electricity 2007-2.xlsx',
+            metropolis_root / previous_month / 'masters' / 'Cost Allocation.xlsx',
+            metropolis_root / previous_month / 'masters' / 'cost_allocation_master.xlsx',
+            # A workbook sitting in the month folder (not out/) is only a fallback.
             metropolis_root / billing_month / 'Cost Allocation - Electricity 2007-2.xls',
             metropolis_root / billing_month / 'Cost Allocation - Electricity 2007-2.xlsx',
             metropolis_root / billing_month / 'Cost Allocation.xls',
             metropolis_root / billing_month / 'Cost Allocation.xlsx',
-            # masters subfolder
             metropolis_root / billing_month / 'masters' / 'Cost Allocation.xlsx',
             metropolis_root / billing_month / 'masters' / 'cost_allocation_master.xlsx',
-            metropolis_root / previous_month / 'masters' / 'Cost Allocation.xlsx',
-            metropolis_root / previous_month / 'masters' / 'cost_allocation_master.xlsx',
-            # Test data fallback
             Path('data/masters/cost_allocation_master.xlsx'),
         ]
         

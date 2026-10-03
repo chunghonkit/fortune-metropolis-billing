@@ -11,15 +11,256 @@ Critical rules:
 - Odd-cent differences of 0.01 are acceptable
 """
 
+import ast
 import openpyxl
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+import re
 import shutil
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 logger = logging.getLogger(__name__)
+
+# Elect Charge keeps two live charge columns. BB is last month, BC is this month.
+_BB_COL = 54
+_BC_COL = 55
+_CHARGE_ROWS = range(4, 42)
+_CELL_REF = re.compile(r'(?<![A-Z])[A-Z]{1,3}\$?\d')
+_BC_REF = re.compile(r'(?<![A-Z])BC(?=\$?\d)')
+_METER_ID = re.compile(r'\d{7,8}')
+
+
+def _formula_number(value):
+    """Whole units and dollar amounts stay integers, the way Elect Charge stores them."""
+    number = float(value)
+    if abs(number - round(number)) < 1e-6:
+        return str(int(round(number)))
+    text = f'{number:.4f}'.rstrip('0').rstrip('.')
+    return text
+
+
+def _stored_number(value):
+    number = float(value)
+    if abs(number - round(number)) < 1e-6:
+        return int(round(number))
+    return number
+
+
+def _is_structural_formula(value):
+    return isinstance(value, str) and value.startswith('=') and _CELL_REF.search(value)
+
+
+def _is_arithmetic_formula(value):
+    if not (isinstance(value, str) and value.startswith('=')):
+        return False
+    if _CELL_REF.search(value):
+        return False
+    try:
+        _eval_arithmetic(value)
+    except (ValueError, SyntaxError, TypeError):
+        return False
+    return True
+
+
+def _eval_arithmetic(formula):
+    """Evaluate a Citybase input formula such as '=27513+7905' or '=88327+3059-0'."""
+    tree = ast.parse(formula[1:], mode='eval')
+
+    def evaluate(node):
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return -evaluate(node.operand)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd):
+            return evaluate(node.operand)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+            left = evaluate(node.left)
+            right = evaluate(node.right)
+            return left + right if isinstance(node.op, ast.Add) else left - right
+        raise ValueError(f'not an input formula: {formula}')
+
+    return evaluate(tree)
+
+
+def _rewrite_bc_to_bb(formula):
+    return _BC_REF.sub('BB', formula)
+
+
+def _meter_ids(label):
+    return _METER_ID.findall(str(label or ''))
+
+
+def _index_bills(bills):
+    by_meter = {}
+    for bill in bills or []:
+        for meter in bill.get('meters') or []:
+            number = str(meter.get('meter_no') or '')
+            if number and number not in by_meter:
+                by_meter[number] = (bill, meter)
+    return by_meter
+
+
+def _meter_primary(meter):
+    if meter.get('primary') is not None:
+        return meter['primary']
+    return meter.get('consumption') or 0
+
+
+def _meter_adjustment(meter):
+    return meter.get('adjustment') or 0
+
+
+def _amount_formula(bill):
+    """Single-meter rows are the amount due. FiT rows keep net + |FiT| as a formula."""
+    total = bill.get('total_amount') or 0
+    fit = abs(bill.get('fit_amount') or 0)
+    if fit:
+        return f'={_formula_number(total)}+{_formula_number(fit)}'
+    return _stored_number(total)
+
+
+def _kwh_formula(meter_numbers, by_meter):
+    """
+    Citybase writes each meter's first register, then the first meter's
+    adjustment, including a zero: =82374+3035-0 or =20674+6878-396.
+    """
+    if not meter_numbers or any(number not in by_meter for number in meter_numbers):
+        missing = [number for number in meter_numbers if number not in by_meter]
+        logger.warning('Elect Charge kWh formula missing meters %s', missing)
+        return None
+    terms = [_formula_number(_meter_primary(by_meter[number][1])) for number in meter_numbers]
+    adjustment = abs(_meter_adjustment(by_meter[meter_numbers[0]][1]))
+    return '=' + '+'.join(terms) + '-' + _formula_number(adjustment)
+
+
+def _kwh_blocks(ws):
+    """
+    Ranges of meter rows that a Total formula sums, plus the Amt row under each.
+
+    Row 32 sums the chiller kWh (28:31) and row 34 is that account's amount.
+    Row 39 sums the FiT kWh (36:38) and row 41 is that account's amount.
+    """
+    blocks = []
+    for row in _CHARGE_ROWS:
+        value = ws.cell(row=row, column=_BC_COL).value
+        if not _is_structural_formula(value):
+            continue
+        match = re.fullmatch(r'=SUM\([A-Z]{1,3}\$?(\d+):[A-Z]{1,3}\$?(\d+)\)', value.replace(' ', ''))
+        if not match:
+            continue
+        start, end = int(match.group(1)), int(match.group(2))
+        summed = list(range(start, end + 1))
+        # Dollar subtotals sum charge formulas. A kWh total sums only meter
+        # inputs, and the account amount sits on the Amt row just below.
+        if any(_is_structural_formula(ws.cell(row=item, column=_BC_COL).value) for item in summed):
+            continue
+        labels = [ws.cell(row=item, column=1).value for item in summed]
+        if not labels or any(not _meter_ids(label) for label in labels):
+            continue
+        amount_row = None
+        for follower in range(row + 1, row + 4):
+            if str(ws.cell(row=follower, column=1).value or '').strip().lower() == 'amt':
+                amount_row = follower
+                break
+        if amount_row is None:
+            continue
+        blocks.append({'rows': summed, 'amount_row': amount_row})
+    return blocks
+
+
+def _roll_and_fill_elect_charge(ws, billing_month, bills):
+    """
+    Move column BC into column BB, then write this month's meter charges into BC.
+
+    Split and total formulas stay formulas, with the column letter rewritten.
+    Input formulas (a sum of meter units or net + |FiT|) are stored in BB as
+    the calculated number. Typed charges and kWh copy as values.
+    """
+    year, month = (int(part) for part in billing_month.split('-'))
+    new_date = datetime(year, month, 1)
+    rolled = {}
+    for row in _CHARGE_ROWS:
+        current = ws.cell(row=row, column=_BC_COL).value
+        if current is None:
+            continue
+        if isinstance(current, datetime):
+            ws.cell(row=row, column=_BB_COL).value = current
+            if row == 4:
+                ws.cell(row=row, column=_BC_COL).value = new_date
+            rolled[row] = 'date'
+            continue
+        if _is_structural_formula(current):
+            ws.cell(row=row, column=_BB_COL).value = _rewrite_bc_to_bb(current)
+            rolled[row] = 'structural'
+            continue
+        if _is_arithmetic_formula(current):
+            ws.cell(row=row, column=_BB_COL).value = _stored_number(_eval_arithmetic(current))
+            rolled[row] = 'arithmetic'
+            continue
+        if isinstance(current, (int, float)):
+            ws.cell(row=row, column=_BB_COL).value = current
+            rolled[row] = 'number'
+            continue
+
+    by_meter = _index_bills(bills)
+    blocks = _kwh_blocks(ws)
+    kwh_rows = {}
+    amount_rows = {}
+    for block in blocks:
+        for row in block['rows']:
+            kwh_rows[row] = block
+        if block['amount_row']:
+            amount_rows[block['amount_row']] = block
+
+    for row, kind in rolled.items():
+        if kind not in ('number', 'arithmetic'):
+            continue
+        label = ws.cell(row=row, column=1).value
+        meters = _meter_ids(label)
+        if row in kwh_rows:
+            if len(meters) == 1 and kind == 'number':
+                found = by_meter.get(meters[0])
+                if not found:
+                    logger.warning('No parsed kWh for Elect Charge meter %s', meters[0])
+                    continue
+                ws.cell(row=row, column=_BC_COL).value = _stored_number(_meter_primary(found[1]))
+            elif len(meters) >= 1:
+                formula = _kwh_formula(meters, by_meter)
+                if formula:
+                    ws.cell(row=row, column=_BC_COL).value = formula
+            continue
+        if row in amount_rows or (meters and kind == 'arithmetic'):
+            block = amount_rows.get(row)
+            owner_meters = meters
+            if block:
+                owner_meters = []
+                for item in block['rows']:
+                    owner_meters.extend(_meter_ids(ws.cell(row=item, column=1).value))
+            bill = None
+            for number in owner_meters:
+                if number in by_meter:
+                    bill = by_meter[number][0]
+                    break
+            if bill is None and meters:
+                for number in meters:
+                    if number in by_meter:
+                        bill = by_meter[number][0]
+                        break
+            if bill is None:
+                logger.warning('No bill for Elect Charge row %s (%s)', row, label)
+                continue
+            ws.cell(row=row, column=_BC_COL).value = _amount_formula(bill)
+            continue
+        if len(meters) == 1 and kind == 'number':
+            found = by_meter.get(meters[0])
+            if not found:
+                logger.warning('No bill for Elect Charge meter %s', meters[0])
+                continue
+            ws.cell(row=row, column=_BC_COL).value = _stored_number(found[0].get('total_amount') or 0)
 
 
 class WorkbookUpdater:
@@ -63,11 +304,13 @@ class WorkbookUpdater:
         
         copied_files = {}
         
-        # Search locations in priority order
+        # Previous month's own out/ is the chain (June copies May's outputs).
+        # The month folder itself is the start of the chain (May copies April).
+        # Never search the month being written, and never its out/ folder.
         search_dirs = [
             previous_month_dir / 'out',
+            previous_month_dir,
             previous_month_dir / 'masters',
-            current_month_dir / 'masters',
         ]
         
         # Find Cost Allocation workbook (long-lived file)
@@ -194,9 +437,23 @@ class WorkbookUpdater:
                 elect_charge_sheet = sheet
                 break
         
+        if elect_charge_sheet and parsed_bills:
+            _roll_and_fill_elect_charge(elect_charge_sheet, billing_month, parsed_bills)
+
         if elect_charge_sheet and meter_log.get('previous') is not None and meter_log.get('present') is not None:
             logger.info(f"Found Elect Charge sheet: {elect_charge_sheet.title}")
-            
+
+            # Citybase: meter 6681757 is BP31, previous BR31, present BS31.
+            # Delta stays the formula BQ31 =BS31-BR31.
+            meter_no = str(meter_log.get('meter_no') or '6681757')
+            if meter_no in str(elect_charge_sheet['BP31'].value or ''):
+                elect_charge_sheet['BR31'] = meter_log['previous']
+                elect_charge_sheet['BS31'] = meter_log['present']
+                logger.info(
+                    'Check meter %s BR31=%s BS31=%s',
+                    meter_no, meter_log['previous'], meter_log['present'],
+                )
+
             # Try to find meter 6681757 row by searching for the meter number
             meter_no = meter_log.get('meter_no', '6681757')
             meter_row = None
