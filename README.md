@@ -169,33 +169,36 @@ Click **Check Gate** to validate:
 
 ## 🎨 Modern UI Design
 
-Part 1 features a redesigned, contemporary SaaS interface:
+Part 1 features a **single-page HTML dashboard** with sidebar navigation and main canvas:
 
-### Design Highlights
-- **Clean Typography:** Modern font stack with clear hierarchy
-- **Soft Depth:** Subtle shadows and borders for visual separation
-- **Status Chips:** Color-coded badges for account status (matched/missing/duplicate/wrong-month/unrecognised)
-- **Dynamic Updates:** Live checklist updates as files are scanned/parsed
-- **Animated Gate Banner:** Smooth transition from blocked → PASSED state
-- **Progress Indicators:** Pulse animations and spinners during operations
-- **Dark Theme Toggle:** Optional dark mode for comfortable viewing
-- **Responsive Layout:** Desktop-first, usable on laptops (768px+)
-- **Polished States:** Professional empty, loading, error, and success states
-- **Accessible:** High contrast, keyboard navigation, screen reader friendly
+### Dashboard Layout
+- **Left Sidebar:** Logo, billing month picker, nav items (Intake active, Master/Allocate locked), theme toggle
+- **Main Canvas:** Dashboard grid of cards
+  - **KPI Row:** Matched/15, missing, wrong-month, duplicates, gate status
+  - **Bills Card:** Folder path display, Scan folder button, browser upload dropzone, last scan time
+  - **Account Board:** 15 account tiles in a grid (account number + role), each with live status chip
+  - **Meter Log Card:** Compact form for check-meter 6681757 (previous/present/date), save and download
+  - **Gate Banner:** Spans bottom of canvas, animates to PASSED when gate passes
 
-### UI Components
-- **Step Rail:** Visual indicator showing Part 1 active, Parts 2-3 locked
-- **Card-based Layout:** Organized sections with clear separation
-- **Tabbed Interface:** Folder scan / Browser upload toggle
-- **Stats Grid:** Quick overview of gate status (matched, missing, duplicates, etc.)
-- **Info Boxes:** Contextual help with folder path, hints
-- **Button Groups:** Organized actions with clear hierarchy
+### Design Features
+- **Contemporary SaaS Aesthetic:** Clean typography, soft shadows, clear hierarchy
+- **Dynamic Status Tiles:** Color-coded account tiles update in place after scan:
+  - 🟢 Matched (green border)
+  - ⚫ Missing (gray, faded)
+  - 🟠 Duplicate (orange border)
+  - 🟠 Wrong Month (orange border)
+  - 🔴 Unrecognised (red border)
+- **Live KPIs:** Top row updates immediately with scan results
+- **Dark Theme Toggle:** Optional dark mode with localStorage persistence
+- **Responsive:** Desktop-first, usable at laptop width (768px+)
+- **Subtle Motion:** Smooth transitions (0.2-0.4s), no jarring animations
 
 ### Tech Stack
-- **Vanilla HTML/CSS/JS** - No heavy frameworks, simple deployment
-- **CSS Custom Properties** - Easy theming with light/dark modes
-- **Smooth Transitions** - 0.2-0.4s animations for polished feel
-- **System Font Stack** - Fast loading, native feel
+- **Vanilla HTML/CSS/JS** - No frameworks for simple Omarchy deployment
+- **CSS Custom Properties** - Easy theming with light/dark mode
+- **Dashboard Grid** - Responsive card-based layout
+
+**All Part 1 backend APIs unchanged.** Same endpoints, same validation logic. All 21 tests pass.
 
 ---
 

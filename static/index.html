@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Metropolis Cost Allocation - Part 1</title>
+    <title>Metropolis Cost Allocation Dashboard</title>
     <style>
         :root {
             --color-primary: #2563eb;
@@ -14,38 +14,28 @@
             --color-neutral: #6b7280;
             
             --bg-primary: #ffffff;
-            --bg-secondary: #f9fafb;
-            --bg-tertiary: #f3f4f6;
-            --bg-elevated: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-sidebar: #0f172a;
+            --bg-card: #ffffff;
             
-            --text-primary: #111827;
-            --text-secondary: #6b7280;
-            --text-tertiary: #9ca3af;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --text-sidebar: #e2e8f0;
             
-            --border-color: #e5e7eb;
-            --border-radius: 12px;
-            --border-radius-lg: 16px;
-            --border-radius-sm: 8px;
+            --border-color: #e2e8f0;
+            --sidebar-width: 260px;
             
             --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            
-            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         
         [data-theme="dark"] {
             --bg-primary: #0f172a;
             --bg-secondary: #1e293b;
-            --bg-tertiary: #334155;
-            --bg-elevated: #1e293b;
-            
+            --bg-card: #1e293b;
+            --bg-sidebar: #020617;
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
-            --text-tertiary: #64748b;
-            
             --border-color: #334155;
         }
         
@@ -56,265 +46,252 @@
         }
         
         body {
-            font-family: var(--font-sans);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
             background: var(--bg-secondary);
             color: var(--text-primary);
-            line-height: 1.6;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            height: 100vh;
+            overflow: hidden;
         }
         
-        .container {
-            max-width: 1280px;
-            margin: 0 auto;
-            padding: 24px;
-        }
-        
-        /* Header */
-        .header {
-            background: var(--bg-elevated);
-            border-bottom: 1px solid var(--border-color);
-            padding: 20px 0;
-            margin-bottom: 32px;
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .header-content {
-            max-width: 1280px;
-            margin: 0 auto;
-            padding: 0 24px;
+        .app-shell {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            height: 100vh;
         }
         
-        .header-title {
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-sidebar);
             display: flex;
-            align-items: center;
-            gap: 12px;
+            flex-direction: column;
+            padding: 24px 16px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            z-index: 10;
         }
         
         .logo {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, var(--color-primary), #3b82f6);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 20px;
+            font-weight: 700;
             color: white;
-            font-weight: 700;
-        }
-        
-        .title-group h1 {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-            line-height: 1.2;
-        }
-        
-        .title-group p {
-            font-size: 13px;
-            color: var(--text-secondary);
-            margin-top: 2px;
-        }
-        
-        .theme-toggle {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 8px 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 14px;
-            color: var(--text-primary);
-        }
-        
-        .theme-toggle:hover {
-            background: var(--bg-secondary);
-            transform: translateY(-1px);
-        }
-        
-        /* Step Rail */
-        .step-rail {
-            background: var(--bg-elevated);
-            border-radius: var(--border-radius-lg);
-            padding: 24px;
             margin-bottom: 32px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border-color);
+            padding: 0 8px;
         }
         
-        .steps {
-            display: flex;
-            justify-content: space-between;
-            position: relative;
+        .logo-icon {
+            display: inline-block;
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--color-primary), #3b82f6);
+            border-radius: 8px;
+            text-align: center;
+            line-height: 36px;
+            margin-right: 10px;
+            vertical-align: middle;
         }
         
-        .steps::before {
-            content: '';
-            position: absolute;
-            top: 20px;
-            left: 40px;
-            right: 40px;
-            height: 2px;
-            background: var(--border-color);
-            z-index: 0;
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            padding: 0 8px;
+            margin-bottom: 12px;
         }
         
-        .step {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-            position: relative;
-            z-index: 1;
+        .month-picker {
+            margin-bottom: 32px;
         }
         
-        .step-number {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 16px;
-            transition: all 0.3s;
-            background: var(--bg-tertiary);
-            color: var(--text-tertiary);
-            border: 2px solid var(--border-color);
-        }
-        
-        .step.active .step-number {
-            background: var(--color-primary);
+        .month-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
             color: white;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+            font-size: 14px;
+            margin-bottom: 8px;
         }
         
-        .step.locked .step-number {
-            background: var(--bg-secondary);
-            color: var(--text-tertiary);
+        .month-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
         }
         
-        .step-label {
+        .btn-month {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--color-primary);
+            border: none;
+            border-radius: 6px;
+            color: white;
             font-size: 13px;
             font-weight: 600;
-            color: var(--text-tertiary);
-            transition: color 0.3s;
+            cursor: pointer;
+            transition: all 0.2s;
         }
         
-        .step.active .step-label {
-            color: var(--color-primary);
+        .btn-month:hover {
+            background: var(--color-primary-hover);
         }
         
-        .step-sublabel {
-            font-size: 11px;
-            color: var(--text-tertiary);
-        }
-        
-        /* Cards */
-        .card {
-            background: var(--bg-elevated);
-            border-radius: var(--border-radius-lg);
-            padding: 24px;
+        .nav-items {
+            flex: 1;
             margin-bottom: 24px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border-color);
-            transition: box-shadow 0.3s;
         }
         
-        .card:hover {
-            box-shadow: var(--shadow-md);
+        .nav-item {
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            border-radius: 6px;
+            color: var(--text-sidebar);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .nav-item.active {
+            background: rgba(37, 99, 235, 0.15);
+            color: #60a5fa;
+        }
+        
+        .nav-item.locked {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .nav-item:not(.locked):not(.active):hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .nav-icon {
+            width: 20px;
+            text-align: center;
+        }
+        
+        .theme-toggle-btn {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .theme-toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        /* Main Canvas */
+        .main-canvas {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            gap: 20px;
+            max-width: 1400px;
+        }
+        
+        /* KPI Row */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+        }
+        
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .kpi-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .kpi-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .kpi-value.success {
+            color: var(--color-success);
+        }
+        
+        .kpi-value.error {
+            color: var(--color-error);
+        }
+        
+        .kpi-value.warning {
+            color: var(--color-warning);
+        }
+        
+        /* Card */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
         }
         
         .card-header {
             display: flex;
             justify-content: space-between;
-            align-items: start;
-            margin-bottom: 16px;
+            align-items: center;
+            margin-bottom: 20px;
         }
         
         .card-title {
             font-size: 18px;
             font-weight: 700;
             color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
         
-        .card-icon {
-            font-size: 20px;
-        }
-        
-        .card-description {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-        
-        /* Form Elements */
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        label {
-            display: block;
+        .card-subtitle {
             font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 8px;
+            color: var(--text-secondary);
+            margin-top: 4px;
         }
         
-        input[type="text"],
-        input[type="number"],
-        input[type="date"],
-        input[type="file"] {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-sm);
-            font-size: 14px;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            transition: all 0.2s;
-            font-family: var(--font-sans);
-        }
-        
-        input:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-        
-        input[type="file"] {
-            padding: 12px;
-            cursor: pointer;
-        }
-        
-        .input-hint {
-            font-size: 12px;
-            color: var(--text-tertiary);
-            margin-top: 6px;
+        .card-actions {
+            display: flex;
+            gap: 8px;
         }
         
         /* Buttons */
         button {
-            padding: 10px 20px;
+            padding: 10px 16px;
             border: none;
-            border-radius: var(--border-radius-sm);
+            border-radius: 6px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            font-family: var(--font-sans);
+            gap: 6px;
         }
         
         .btn-primary {
@@ -325,18 +302,16 @@
         .btn-primary:hover:not(:disabled) {
             background: var(--color-primary-hover);
             transform: translateY(-1px);
-            box-shadow: var(--shadow-md);
         }
         
         .btn-secondary {
-            background: var(--bg-tertiary);
+            background: var(--bg-secondary);
             color: var(--text-primary);
             border: 1px solid var(--border-color);
         }
         
         .btn-secondary:hover:not(:disabled) {
-            background: var(--bg-secondary);
-            transform: translateY(-1px);
+            background: var(--bg-primary);
         }
         
         .btn-success {
@@ -346,13 +321,6 @@
         
         .btn-success:hover:not(:disabled) {
             background: #059669;
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-md);
-        }
-        
-        .btn-warning {
-            background: var(--color-warning);
-            color: white;
         }
         
         button:disabled {
@@ -360,43 +328,49 @@
             cursor: not-allowed;
         }
         
-        .button-group {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
+        /* Info Box */
+        .info-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+        
+        .info-box code {
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--color-primary);
         }
         
         /* Tabs */
         .tabs {
             display: flex;
-            gap: 4px;
-            margin-bottom: 20px;
-            background: var(--bg-tertiary);
-            padding: 4px;
-            border-radius: var(--border-radius-sm);
+            gap: 8px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
         }
         
         .tab {
-            flex: 1;
             padding: 10px 16px;
             background: transparent;
             border: none;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
+            border-bottom: 2px solid transparent;
             color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
         }
         
         .tab.active {
-            background: var(--bg-elevated);
             color: var(--color-primary);
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .tab:hover:not(.active) {
-            color: var(--text-primary);
+            border-bottom-color: var(--color-primary);
         }
         
         .tab-content {
@@ -405,30 +379,209 @@
         
         .tab-content.active {
             display: block;
-            animation: fadeIn 0.3s;
         }
         
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
+        /* Account Board */
+        .account-board {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
         }
         
-        /* Status Elements */
-        .status-alert {
-            padding: 12px 16px;
-            border-radius: var(--border-radius-sm);
-            margin-top: 16px;
+        .account-tile {
+            padding: 14px 16px;
+            border-radius: 8px;
+            border: 2px solid;
+            transition: all 0.2s;
+            cursor: default;
+        }
+        
+        .account-tile.empty {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+            opacity: 0.6;
+        }
+        
+        .account-tile.matched {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--color-success);
+        }
+        
+        .account-tile.missing {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+        }
+        
+        .account-tile.duplicate {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: var(--color-warning);
+        }
+        
+        .account-tile.wrong-month {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: var(--color-warning);
+        }
+        
+        .account-tile.unrecognised {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--color-error);
+        }
+        
+        .account-number {
+            font-family: monospace;
             font-size: 13px;
-            line-height: 1.5;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .account-role {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+        
+        .account-status {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 8px;
+        }
+        
+        .account-tile.matched .account-status {
+            color: var(--color-success);
+        }
+        
+        .account-tile.missing .account-status {
+            color: var(--color-neutral);
+        }
+        
+        .account-tile.duplicate .account-status {
+            color: var(--color-warning);
+        }
+        
+        .account-tile.wrong-month .account-status {
+            color: var(--color-warning);
+        }
+        
+        .account-tile.unrecognised .account-status {
+            color: var(--color-error);
+        }
+        
+        /* Meter Log */
+        .meter-form {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .form-input {
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        /* Gate Banner */
+        .gate-banner {
+            position: sticky;
+            bottom: 0;
+            margin-top: 20px;
+            padding: 20px 24px;
+            border-radius: 12px;
+            border: 2px solid;
+            background: var(--bg-card);
+            box-shadow: var(--shadow-md);
+            transition: all 0.4s ease;
+        }
+        
+        .gate-banner.pending {
+            border-color: var(--border-color);
+        }
+        
+        .gate-banner.failed {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: var(--color-error);
+        }
+        
+        .gate-banner.passed {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: var(--color-success);
+            animation: gatePass 0.6s ease;
+        }
+        
+        @keyframes gatePass {
+            0% { transform: scale(0.98); opacity: 0; }
+            50% { transform: scale(1.01); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .gate-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .gate-info {
+            flex: 1;
+        }
+        
+        .gate-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .gate-banner.failed .gate-title {
+            color: var(--color-error);
+        }
+        
+        .gate-banner.passed .gate-title {
+            color: var(--color-success);
+        }
+        
+        .gate-summary {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .gate-errors {
+            font-size: 12px;
+            color: var(--color-error);
+            margin-top: 8px;
+        }
+        
+        /* Status Alert */
+        .status-alert {
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
             display: flex;
             align-items: start;
-            gap: 10px;
-            animation: slideDown 0.3s;
-        }
-        
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+            gap: 8px;
         }
         
         .status-alert.info {
@@ -449,186 +602,12 @@
             border: 1px solid rgba(239, 68, 68, 0.2);
         }
         
-        .status-alert.warning {
-            background: rgba(245, 158, 11, 0.1);
-            color: var(--color-warning);
-            border: 1px solid rgba(245, 158, 11, 0.2);
-        }
-        
-        /* Info Box */
-        .info-box {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius-sm);
-            padding: 14px 16px;
-            margin-bottom: 20px;
-            font-size: 13px;
-            line-height: 1.5;
-        }
-        
-        .info-box strong {
-            color: var(--text-primary);
-        }
-        
-        .info-box code {
-            background: var(--bg-secondary);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: var(--font-mono);
-            font-size: 12px;
-            color: var(--color-primary);
-        }
-        
-        /* Gate Banner */
-        .gate-banner {
-            padding: 20px 24px;
-            border-radius: var(--border-radius-lg);
-            border: 2px solid;
-            margin-bottom: 24px;
-            transition: all 0.4s ease;
-        }
-        
-        .gate-banner.pending {
-            background: var(--bg-tertiary);
-            border-color: var(--border-color);
-        }
-        
-        .gate-banner.failed {
-            background: rgba(239, 68, 68, 0.08);
-            border-color: var(--color-error);
-        }
-        
-        .gate-banner.passed {
-            background: rgba(16, 185, 129, 0.08);
-            border-color: var(--color-success);
-            animation: gatePass 0.6s ease;
-        }
-        
-        @keyframes gatePass {
-            0% { transform: scale(0.98); opacity: 0; }
-            50% { transform: scale(1.02); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-        
-        .gate-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        
-        .gate-icon {
-            font-size: 24px;
-        }
-        
-        .gate-title {
-            font-size: 18px;
-            font-weight: 700;
-        }
-        
-        .gate-banner.failed .gate-title {
-            color: var(--color-error);
-        }
-        
-        .gate-banner.passed .gate-title {
-            color: var(--color-success);
-        }
-        
-        .gate-summary {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 16px;
-        }
-        
-        .gate-errors {
-            margin-top: 12px;
-        }
-        
-        .gate-errors ul {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .gate-errors li {
-            padding: 6px 0;
-            font-size: 13px;
-            color: var(--color-error);
-        }
-        
-        /* Checklist */
-        .checklist-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 12px;
-            margin-top: 20px;
-        }
-        
-        .checklist-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 14px;
-            background: var(--bg-tertiary);
-            border-radius: var(--border-radius-sm);
-            border: 1px solid var(--border-color);
-            transition: all 0.2s;
-            font-size: 13px;
-        }
-        
-        .checklist-item:hover {
-            transform: translateX(2px);
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .status-chip {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-        }
-        
-        .status-chip.matched {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--color-success);
-        }
-        
-        .status-chip.missing {
-            background: rgba(107, 114, 128, 0.15);
-            color: var(--color-neutral);
-        }
-        
-        .status-chip.duplicate {
-            background: rgba(245, 158, 11, 0.15);
-            color: var(--color-warning);
-        }
-        
-        .status-chip.wrong-month {
-            background: rgba(245, 158, 11, 0.15);
-            color: var(--color-warning);
-        }
-        
-        .status-chip.unrecognised {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--color-error);
-        }
-        
-        .checklist-account {
-            flex: 1;
-            font-family: var(--font-mono);
-            font-size: 12px;
-            color: var(--text-primary);
-            font-weight: 500;
-        }
-        
-        /* Loading Spinner */
+        /* Spinner */
         .spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0, 0, 0, 0.1);
             border-radius: 50%;
             border-top-color: currentColor;
             animation: spin 0.8s linear infinite;
@@ -638,324 +617,234 @@
             to { transform: rotate(360deg); }
         }
         
-        /* Progress Bar */
-        .progress-bar {
-            height: 4px;
-            background: var(--bg-tertiary);
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 12px;
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
         }
         
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--color-primary), #3b82f6);
-            transition: width 0.3s ease;
-            border-radius: 2px;
-        }
-        
-        /* Pulse Animation */
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
         
-        .pulse {
-            animation: pulse 2s ease-in-out infinite;
-        }
-        
-        /* Stats Grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 16px;
-            margin-top: 20px;
-        }
-        
-        .stat-card {
-            background: var(--bg-tertiary);
-            padding: 16px;
-            border-radius: var(--border-radius-sm);
-            border: 1px solid var(--border-color);
-        }
-        
-        .stat-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-        
-        /* Form Grid */
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-        
-        /* Footer */
-        .footer {
-            text-align: center;
-            padding: 32px 0;
-            color: var(--text-tertiary);
-            font-size: 13px;
-        }
-        
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 48px 24px;
-            color: var(--text-secondary);
-        }
-        
-        .empty-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-            opacity: 0.5;
-        }
-        
-        .empty-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .empty-description {
-            font-size: 14px;
-        }
-        
         /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                padding: 16px;
+        @media (max-width: 1024px) {
+            .account-board {
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
             }
             
-            .header-content {
-                padding: 0 16px;
-            }
-            
-            .steps::before {
-                display: none;
-            }
-            
-            .step-sublabel {
-                display: none;
-            }
-            
-            .checklist-grid {
+            .meter-form {
                 grid-template-columns: 1fr;
             }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
             
-            .stats-grid {
+            .kpi-row {
                 grid-template-columns: repeat(2, 1fr);
             }
             
-            .button-group {
-                flex-direction: column;
-            }
-            
-            .button-group button {
-                width: 100%;
-                justify-content: center;
+            .account-board {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-content">
-            <div class="header-title">
-                <div class="logo">M</div>
-                <div class="title-group">
-                    <h1>Metropolis Cost Allocation</h1>
-                    <p>Part 1: Bills + Meter Log Intake</p>
-                </div>
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">M</span>
+                Metropolis
             </div>
-            <button class="theme-toggle" onclick="toggleTheme()">
+            
+            <div class="month-picker">
+                <div class="section-label">Billing Month</div>
+                <input type="text" id="monthInput" class="month-input" placeholder="YYYY-MM" />
+                <button class="btn-month" onclick="setMonth()">Set Month</button>
+            </div>
+            
+            <nav class="nav-items">
+                <div class="section-label">Navigation</div>
+                <div class="nav-item active">
+                    <span class="nav-icon">📄</span>
+                    <span>Intake</span>
+                </div>
+                <div class="nav-item locked">
+                    <span class="nav-icon">📊</span>
+                    <span>Master</span>
+                </div>
+                <div class="nav-item locked">
+                    <span class="nav-icon">💰</span>
+                    <span>Allocate</span>
+                </div>
+            </nav>
+            
+            <button class="theme-toggle-btn" onclick="toggleTheme()">
                 <span id="themeIcon">🌙</span>
+                <span>Toggle Theme</span>
             </button>
-        </div>
-    </div>
-    
-    <div class="container">
-        <!-- Step Rail -->
-        <div class="step-rail">
-            <div class="steps">
-                <div class="step active">
-                    <div class="step-number">1</div>
-                    <div class="step-label">Intake</div>
-                    <div class="step-sublabel">Bills & Meter Log</div>
-                </div>
-                <div class="step locked">
-                    <div class="step-number">2</div>
-                    <div class="step-label">Master</div>
-                    <div class="step-sublabel">Power Master & Allocation</div>
-                </div>
-                <div class="step locked">
-                    <div class="step-number">3</div>
-                    <div class="step-label">Allocate</div>
-                    <div class="step-sublabel">Cost Sheet Export</div>
-                </div>
-            </div>
-        </div>
+        </aside>
         
-        <!-- Month Picker -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <span class="card-icon">📅</span>
-                    Billing Month
-                </h2>
-            </div>
-            <p class="card-description">Set the billing month before scanning folder or uploading bills.</p>
-            <div class="form-group">
-                <label for="monthInput">Billing Month (YYYY-MM)</label>
-                <input type="text" id="monthInput" placeholder="2025-04" />
-                <div class="input-hint">Format: YYYY-MM (e.g., 2025-04 for April 2025)</div>
-            </div>
-            <button class="btn-primary" onclick="setMonth()">
-                <span>Set Month</span>
-            </button>
-            <div id="monthStatus"></div>
-        </div>
-        
-        <!-- Bills Intake -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <span class="card-icon">📄</span>
-                    CLP Bills Intake
-                </h2>
-            </div>
-            <p class="card-description">Scan designated folder or upload bills via browser. Expects exactly 15 Metropolis CLP accounts.</p>
-            
-            <div class="tabs">
-                <button class="tab active" onclick="switchTab('folder')">📁 Folder Scan</button>
-                <button class="tab" onclick="switchTab('upload')">⬆️ Browser Upload</button>
-            </div>
-            
-            <!-- Folder Scan Tab -->
-            <div id="folderTab" class="tab-content active">
-                <div class="info-box" id="folderInfo">
-                    <strong>Folder path:</strong> <code id="folderPath">Loading...</code>
-                    <br>Place exactly 15 CLP bill PDFs in the <strong>bills/</strong> subfolder.
+        <!-- Main Canvas -->
+        <main class="main-canvas">
+            <div class="dashboard-grid">
+                <!-- KPI Row -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Matched</div>
+                        <div class="kpi-value" id="kpiMatched">0 / 15</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Missing</div>
+                        <div class="kpi-value error" id="kpiMissing">15</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Wrong Month</div>
+                        <div class="kpi-value warning" id="kpiWrongMonth">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Duplicates</div>
+                        <div class="kpi-value warning" id="kpiDuplicates">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gate Status</div>
+                        <div class="kpi-value error" id="kpiGate">Blocked</div>
+                    </div>
                 </div>
-                <div class="button-group">
-                    <button class="btn-primary" onclick="scanFolder()">
-                        <span id="scanIcon">🔍</span>
-                        <span>Scan Folder</span>
-                    </button>
-                    <button class="btn-secondary" onclick="refreshFolder()">
-                        <span>🔄</span>
-                        <span>Refresh</span>
-                    </button>
+                
+                <!-- Bills Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">CLP Bills</h2>
+                            <div class="card-subtitle" id="lastScanTime">No scan yet</div>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn-primary" onclick="scanFolder()">
+                                <span id="scanIcon">🔍</span>
+                                <span>Scan Folder</span>
+                            </button>
+                            <button class="btn-secondary" onclick="refreshFolder()">
+                                🔄
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="tabs">
+                        <button class="tab active" onclick="switchTab('folder')">Folder Scan</button>
+                        <button class="tab" onclick="switchTab('upload')">Browser Upload</button>
+                    </div>
+                    
+                    <div id="folderTab" class="tab-content active">
+                        <div class="info-box">
+                            <strong>Folder:</strong> <code id="folderPath">~/Metropolis/{YYYY-MM}/bills/</code>
+                        </div>
+                        <div id="folderStatus"></div>
+                    </div>
+                    
+                    <div id="uploadTab" class="tab-content">
+                        <div class="form-group">
+                            <label class="form-label">Select PDF files (up to 15)</label>
+                            <input type="file" id="billFiles" class="form-input" accept=".pdf" multiple />
+                        </div>
+                        <button class="btn-primary" onclick="uploadBills()">
+                            ⬆️ Upload & Parse
+                        </button>
+                        <div id="uploadStatus"></div>
+                    </div>
                 </div>
-                <div id="folderStatus"></div>
-            </div>
-            
-            <!-- Upload Tab -->
-            <div id="uploadTab" class="tab-content">
-                <div class="form-group">
-                    <label for="billFiles">Select CLP Bill PDFs (multiple)</label>
-                    <input type="file" id="billFiles" accept=".pdf" multiple />
-                    <div class="input-hint">Choose up to 15 PDF files</div>
+                
+                <!-- Account Board -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">15 Expected Accounts</h2>
+                            <div class="card-subtitle">Metropolis CLP accounts with live status</div>
+                        </div>
+                    </div>
+                    
+                    <div class="account-board" id="accountBoard">
+                        <!-- Tiles populated by JS -->
+                    </div>
                 </div>
-                <button class="btn-primary" onclick="uploadBills()">
-                    <span>⬆️</span>
-                    <span>Upload & Parse Bills</span>
-                </button>
-                <div id="uploadStatus"></div>
-            </div>
-        </div>
-        
-        <!-- Gate Status -->
-        <div id="gateContainer"></div>
-        
-        <!-- Account Checklist -->
-        <div class="card" id="checklistCard" style="display: none;">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <span class="card-icon">✓</span>
-                    Account Checklist
-                </h2>
-            </div>
-            <p class="card-description">Live status of 15 expected Metropolis CLP accounts.</p>
-            <div id="checklistStats"></div>
-            <div id="checklistGrid" class="checklist-grid"></div>
-        </div>
-        
-        <!-- Meter Log -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <span class="card-icon">📊</span>
-                    Meter Log
-                </h2>
-            </div>
-            <p class="card-description">Check-meter <strong>6681757</strong> (散熱水泵電 / Sea Water Pump). Drives account 55861-52267-1 AC/SW allocation.</p>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="meterPrevious">Previous Reading</label>
-                    <input type="number" id="meterPrevious" placeholder="e.g., 1234567" />
+                
+                <!-- Meter Log Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Meter Log</h2>
+                            <div class="card-subtitle">Check-meter 6681757 (散熱水泵電 / Sea Water Pump)</div>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn-success" onclick="saveMeterLog()">
+                                💾 Save
+                            </button>
+                            <button class="btn-secondary" onclick="downloadMeterLog()">
+                                📥 Download Excel
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="meter-form">
+                        <div class="form-group">
+                            <label class="form-label">Previous Reading</label>
+                            <input type="number" id="meterPrevious" class="form-input" placeholder="e.g., 1234567" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Present Reading</label>
+                            <input type="number" id="meterPresent" class="form-input" placeholder="e.g., 1235890" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Read Date (optional)</label>
+                            <input type="date" id="meterDate" class="form-input" />
+                        </div>
+                    </div>
+                    <div id="meterStatus"></div>
                 </div>
-                <div class="form-group">
-                    <label for="meterPresent">Present Reading</label>
-                    <input type="number" id="meterPresent" placeholder="e.g., 1235890" />
+                
+                <!-- Gate Banner -->
+                <div id="gateBanner" class="gate-banner pending">
+                    <div class="gate-content">
+                        <div class="gate-info">
+                            <div class="gate-title">Gate Validation</div>
+                            <div class="gate-summary">Set month and parse bills to validate gate conditions</div>
+                            <div class="gate-errors" id="gateErrors"></div>
+                        </div>
+                        <button id="continueBtn" class="btn-success" onclick="continueToPart2()" disabled>
+                            ▶️ Continue to Part 2
+                        </button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="meterDate">Read Date (optional)</label>
-                    <input type="date" id="meterDate" />
-                </div>
             </div>
-            <div class="button-group">
-                <button class="btn-success" onclick="saveMeterLog()">
-                    <span>💾</span>
-                    <span>Save Meter Log</span>
-                </button>
-                <button class="btn-secondary" onclick="downloadMeterLog()">
-                    <span>📥</span>
-                    <span>Download Excel</span>
-                </button>
-            </div>
-            <div id="meterStatus"></div>
-        </div>
-        
-        <!-- Actions -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <span class="card-icon">🎯</span>
-                    Actions
-                </h2>
-            </div>
-            <div class="button-group">
-                <button id="continueBtn" class="btn-success" onclick="continueToPart2()" disabled>
-                    <span>▶️</span>
-                    <span>Continue to Part 2</span>
-                </button>
-                <button class="btn-warning" onclick="reset()">
-                    <span>🔄</span>
-                    <span>Clear Session</span>
-                </button>
-            </div>
-        </div>
-        
-        <div class="footer">
-            Metropolis Electricity Cost Allocation v1.0.0-part1 | Fortune Metropolis | Local Omarchy Test
-        </div>
+        </main>
     </div>
     
     <script>
         const API_BASE = '';
         let currentTab = 'folder';
+        
+        // Expected accounts with roles
+        const EXPECTED_ACCOUNTS = [
+            { account: '55861-52267-1', role: 'Retail chillers → AC/SW' },
+            { account: '24096-78457-6', role: 'Multi-centre (office)' },
+            { account: '13639-58422-3', role: 'Office chiller → AO/OC' },
+            { account: '40722-61440-7', role: 'Multi-centre (carpark)' },
+            { account: '35204-69738-4', role: 'Multi-centre (carpark)' },
+            { account: '97968-02236-6', role: 'DC 100%' },
+            { account: '23529-59279-9', role: 'SW 100%' },
+            { account: '79292-23337-6', role: 'Office chiller → AO/OC' },
+            { account: '52167-13569-2', role: 'FiT (retail)' },
+            { account: '08731-83914-5', role: 'DC 100%' },
+            { account: '00776-78552-1', role: 'FiT' },
+            { account: '88931-57029-6', role: 'C 100%' },
+            { account: '70873-85471-3', role: 'SA 100%' },
+            { account: '72399-00664-9', role: 'SA 100%' },
+            { account: '82805-94744-7', role: 'Food Court → FC 100%' },
+        ];
         
         // Theme Toggle
         function toggleTheme() {
@@ -967,13 +856,42 @@
             localStorage.setItem('theme', newTheme);
         }
         
-        // Load saved theme
+        // Load theme and config
         window.addEventListener('load', () => {
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-theme', savedTheme);
             document.getElementById('themeIcon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            
+            const today = new Date();
+            document.getElementById('monthInput').value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            
             loadConfig();
+            initAccountBoard();
         });
+        
+        // Initialize account board
+        function initAccountBoard() {
+            const board = document.getElementById('accountBoard');
+            board.innerHTML = EXPECTED_ACCOUNTS.map(({ account, role }) => `
+                <div class="account-tile empty" id="tile-${account}">
+                    <div class="account-number">${account}</div>
+                    <div class="account-role">${role}</div>
+                    <div class="account-status">—</div>
+                </div>
+            `).join('');
+        }
+        
+        // Load config
+        async function loadConfig() {
+            try {
+                const response = await fetch(`${API_BASE}/api/config`);
+                const config = await response.json();
+                const month = document.getElementById('monthInput').value;
+                document.getElementById('folderPath').textContent = `${config.metropolis_root}/${month}/bills/`;
+            } catch (error) {
+                console.error('Error loading config:', error);
+            }
+        }
         
         // Tab switching
         function switchTab(tab) {
@@ -990,34 +908,13 @@
             }
         }
         
-        // Load config
-        async function loadConfig() {
-            try {
-                const response = await fetch(`${API_BASE}/api/config`);
-                const config = await response.json();
-                
-                const monthInput = document.getElementById('monthInput');
-                const today = new Date();
-                monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-                
-                const folderPath = `${config.metropolis_root}/${monthInput.value}/bills/`;
-                document.getElementById('folderPath').textContent = folderPath;
-            } catch (error) {
-                console.error('Error loading config:', error);
-            }
-        }
-        
-        // Set billing month
+        // Set month
         async function setMonth() {
             const monthInput = document.getElementById('monthInput');
-            const status = document.getElementById('monthStatus');
             
             if (!monthInput.value) {
-                status.innerHTML = '<div class="status-alert error">Please enter a billing month</div>';
                 return;
             }
-            
-            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Setting month...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/set-month`, {
@@ -1029,16 +926,11 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    status.innerHTML = `<div class="status-alert success">✓ Billing month set to ${result.month}</div>`;
-                    
                     const config = await (await fetch(`${API_BASE}/api/config`)).json();
-                    const folderPath = `${config.metropolis_root}/${monthInput.value}/bills/`;
-                    document.getElementById('folderPath').textContent = folderPath;
-                } else {
-                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
+                    document.getElementById('folderPath').textContent = `${config.metropolis_root}/${monthInput.value}/bills/`;
                 }
             } catch (error) {
-                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+                console.error('Error setting month:', error);
             }
         }
         
@@ -1058,14 +950,9 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    let html = `<div class="status-alert success">✓ Scanned ${result.folder_path}</div>`;
-                    html += `<div class="status-alert info">Found ${result.pdfs_found} PDFs, parsed ${result.bills_parsed} bills</div>`;
-                    
-                    if (result.errors.length > 0) {
-                        html += '<div class="status-alert warning">⚠ Errors: ' + result.errors.slice(0, 3).join(', ') + (result.errors.length > 3 ? '...' : '') + '</div>';
-                    }
-                    
-                    status.innerHTML = html;
+                    const now = new Date().toLocaleTimeString();
+                    document.getElementById('lastScanTime').textContent = `Last scan: ${now}`;
+                    status.innerHTML = `<div class="status-alert success">✓ Found ${result.pdfs_found} PDFs, parsed ${result.bills_parsed} bills</div>`;
                     displayGate(result.gate_status);
                     scanIcon.textContent = '✓';
                     setTimeout(() => scanIcon.textContent = '🔍', 2000);
@@ -1101,7 +988,7 @@
                 formData.append('files', file);
             }
             
-            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Uploading and parsing bills...</div>';
+            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Uploading and parsing...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/upload-bills`, {
@@ -1112,13 +999,9 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    let html = `<div class="status-alert success">✓ Parsed ${result.bills_parsed} bills</div>`;
-                    
-                    if (result.errors.length > 0) {
-                        html += '<div class="status-alert warning">⚠ Errors: ' + result.errors.slice(0, 3).join(', ') + (result.errors.length > 3 ? '...' : '') + '</div>';
-                    }
-                    
-                    status.innerHTML = html;
+                    const now = new Date().toLocaleTimeString();
+                    document.getElementById('lastScanTime').textContent = `Last upload: ${now}`;
+                    status.innerHTML = `<div class="status-alert success">✓ Parsed ${result.bills_parsed} bills</div>`;
                     displayGate(result.gate_status);
                 } else {
                     status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
@@ -1128,85 +1011,56 @@
             }
         }
         
-        // Display gate status
+        // Display gate
         function displayGate(gate) {
-            const container = document.getElementById('gateContainer');
-            const checklistCard = document.getElementById('checklistCard');
-            const continueBtn = document.getElementById('continueBtn');
+            if (!gate) return;
             
-            if (!gate) {
-                container.innerHTML = '';
-                return;
-            }
+            // Update KPIs
+            document.getElementById('kpiMatched').textContent = `${gate.summary.matched} / 15`;
+            document.getElementById('kpiMissing').textContent = gate.summary.missing;
+            document.getElementById('kpiWrongMonth').textContent = gate.summary.wrong_month;
+            document.getElementById('kpiDuplicates').textContent = gate.summary.duplicates;
+            document.getElementById('kpiGate').textContent = gate.passed ? 'Passed' : 'Blocked';
+            document.getElementById('kpiGate').className = gate.passed ? 'kpi-value success' : 'kpi-value error';
             
-            const gateClass = gate.passed ? 'passed' : (gate.errors.length > 0 ? 'failed' : 'pending');
-            let html = `<div class="gate-banner ${gateClass}">`;
-            
-            if (gate.passed) {
-                html += '<div class="gate-header"><span class="gate-icon">✓</span><h3 class="gate-title">Gate PASSED</h3></div>';
-                html += '<div class="gate-summary">All conditions met. Ready to continue to Part 2.</div>';
-            } else {
-                html += '<div class="gate-header"><span class="gate-icon">⚠</span><h3 class="gate-title">Gate Validation</h3></div>';
-                html += `<div class="gate-summary">${gate.summary.matched}/${gate.summary.expected} accounts matched`;
-                if (gate.summary.missing > 0) html += `, ${gate.summary.missing} missing`;
-                if (gate.summary.duplicates > 0) html += `, ${gate.summary.duplicates} duplicates`;
-                if (gate.summary.wrong_month > 0) html += `, ${gate.summary.wrong_month} wrong month`;
-                if (gate.summary.unrecognised > 0) html += `, ${gate.summary.unrecognised} unrecognised`;
-                html += '</div>';
-                
-                if (gate.errors.length > 0) {
-                    html += '<div class="gate-errors"><ul>';
-                    gate.errors.forEach(err => {
-                        html += `<li>• ${err}</li>`;
-                    });
-                    html += '</ul></div>';
+            // Update account tiles
+            for (const [account, info] of Object.entries(gate.account_checklist)) {
+                const tile = document.getElementById(`tile-${account}`);
+                if (tile) {
+                    tile.className = `account-tile ${info.status}`;
+                    const statusLabel = {
+                        'matched': '✓ Matched',
+                        'missing': '— Missing',
+                        'duplicate': '⚠ Duplicate',
+                        'wrong_month': '⚠ Wrong Month',
+                        'unrecognised': '✗ Unrecognised'
+                    }[info.status];
+                    tile.querySelector('.account-status').textContent = statusLabel;
                 }
             }
             
-            html += '</div>';
-            container.innerHTML = html;
+            // Update gate banner
+            const banner = document.getElementById('gateBanner');
+            const gateClass = gate.passed ? 'passed' : (gate.errors.length > 0 ? 'failed' : 'pending');
+            banner.className = `gate-banner ${gateClass}`;
             
-            // Show checklist if we have account data
-            if (gate.account_checklist && Object.keys(gate.account_checklist).length > 0) {
-                checklistCard.style.display = 'block';
-                displayChecklist(gate.account_checklist, gate.summary);
+            const title = banner.querySelector('.gate-title');
+            const summary = banner.querySelector('.gate-summary');
+            const errors = document.getElementById('gateErrors');
+            
+            if (gate.passed) {
+                title.textContent = '✓ Gate PASSED';
+                summary.textContent = 'All conditions met. Ready to continue to Part 2.';
+                errors.textContent = '';
+            } else {
+                title.textContent = 'Gate Validation';
+                summary.textContent = `${gate.summary.matched}/15 matched, ${gate.summary.missing} missing`;
+                if (gate.errors.length > 0) {
+                    errors.textContent = gate.errors.join(' • ');
+                }
             }
             
-            continueBtn.disabled = !gate.passed;
-        }
-        
-        // Display checklist
-        function displayChecklist(checklist, summary) {
-            const statsDiv = document.getElementById('checklistStats');
-            const gridDiv = document.getElementById('checklistGrid');
-            
-            // Stats
-            let statsHtml = '<div class="stats-grid">';
-            statsHtml += `<div class="stat-card"><div class="stat-label">Matched</div><div class="stat-value">${summary.matched}</div></div>`;
-            statsHtml += `<div class="stat-card"><div class="stat-label">Missing</div><div class="stat-value">${summary.missing}</div></div>`;
-            statsHtml += `<div class="stat-card"><div class="stat-label">Duplicates</div><div class="stat-value">${summary.duplicates}</div></div>`;
-            statsHtml += `<div class="stat-card"><div class="stat-label">Wrong Month</div><div class="stat-value">${summary.wrong_month}</div></div>`;
-            statsHtml += `<div class="stat-card"><div class="stat-label">Unrecognised</div><div class="stat-value">${summary.unrecognised}</div></div>`;
-            statsHtml += '</div>';
-            statsDiv.innerHTML = statsHtml;
-            
-            // Grid
-            let gridHtml = '';
-            for (const [account, info] of Object.entries(checklist)) {
-                const statusLabel = {
-                    'matched': 'Matched',
-                    'missing': 'Missing',
-                    'duplicate': 'Duplicate',
-                    'wrong_month': 'Wrong Month',
-                    'unrecognised': 'Unrecognised'
-                }[info.status];
-                
-                gridHtml += `<div class="checklist-item">
-                    <span class="status-chip ${info.status}">${statusLabel}</span>
-                    <span class="checklist-account">${account}</span>
-                </div>`;
-            }
-            gridDiv.innerHTML = gridHtml;
+            document.getElementById('continueBtn').disabled = !gate.passed;
         }
         
         // Save meter log
@@ -1217,7 +1071,7 @@
             const status = document.getElementById('meterStatus');
             
             if (!previous || !present) {
-                status.innerHTML = '<div class="status-alert error">Please enter both previous and present readings</div>';
+                status.innerHTML = '<div class="status-alert error">Please enter both readings</div>';
                 return;
             }
             
@@ -1226,7 +1080,7 @@
             formData.append('present', present);
             if (readDate) formData.append('read_date', readDate);
             
-            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Saving meter log...</div>';
+            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Saving...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/api/meter-log`, {
@@ -1238,11 +1092,8 @@
                 
                 if (result.success) {
                     const delta = result.delta || 0;
-                    status.innerHTML = `<div class="status-alert success">✓ Meter log saved: Δ = ${delta.toLocaleString()} kWh</div>`;
-                    
-                    if (result.gate_status) {
-                        displayGate(result.gate_status);
-                    }
+                    status.innerHTML = `<div class="status-alert success">✓ Saved: Δ = ${delta.toLocaleString()} kWh</div>`;
+                    if (result.gate_status) displayGate(result.gate_status);
                 } else {
                     status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
                 }
@@ -1252,40 +1103,13 @@
         }
         
         // Download meter log
-        async function downloadMeterLog() {
+        function downloadMeterLog() {
             window.location.href = `${API_BASE}/api/download-meter-log`;
         }
         
         // Continue to Part 2
         function continueToPart2() {
             alert('Part 2 (Master & Allocation) is TODO. Part 1 gate has passed!');
-        }
-        
-        // Reset session
-        async function reset() {
-            if (!confirm('Reset session? This will clear all parsed bills, meter log, and gate status.')) {
-                return;
-            }
-            
-            try {
-                await fetch(`${API_BASE}/api/reset`, { method: 'POST' });
-                
-                document.getElementById('monthStatus').innerHTML = '';
-                document.getElementById('folderStatus').innerHTML = '';
-                document.getElementById('uploadStatus').innerHTML = '';
-                document.getElementById('gateContainer').innerHTML = '';
-                document.getElementById('meterStatus').innerHTML = '';
-                document.getElementById('checklistCard').style.display = 'none';
-                document.getElementById('meterPrevious').value = '';
-                document.getElementById('meterPresent').value = '';
-                document.getElementById('meterDate').value = '';
-                document.getElementById('billFiles').value = '';
-                document.getElementById('continueBtn').disabled = true;
-                
-                alert('Session reset');
-            } catch (error) {
-                alert('Error resetting session: ' + error.message);
-            }
         }
     </script>
 </body>
