@@ -207,14 +207,24 @@ class AllocationEngine:
         
         Tries multiple lookup strategies:
         1. LOCKED RULE: Food Court account 82805-94744-7 is 100% FC (outside master)
-        2. Full account number (e.g., "52167-13569-2")
-        3. Short account number (first segment, e.g., "52167")
-        4. Meter number with LOCKED mapping (7662756→9092771, 7662761→9091324)
+        2. SPECIAL: Retail chillers 55861-52267-1 AC/SW split from THIS month's check-meter 6681757
+        3. Full account number (e.g., "52167-13569-2")
+        4. Short account number (first segment, e.g., "52167")
+        5. Meter number with LOCKED mapping (7662756→9092771, 7662761→9091324)
         """
         # LOCKED RULE: Food Court account 82805-94744-7 = FC 100% (outside master)
         if account == '82805-94744-7':
             logger.info(f"Account {account}: FC 100% hard rule (outside master)")
             return [{'centre': 'FC', 'percentage': 1.0}]
+        
+        # SPECIAL RULE: Retail chillers 55861-52267-1 AC/SW split from check-meter 6681757
+        if account == self.SPECIAL_AC_SW_ACCOUNT:
+            check_meter_split = self._compute_check_meter_split(bill)
+            if check_meter_split:
+                logger.info(f"Account {account}: Using live check-meter split: {check_meter_split}")
+                return check_meter_split
+            else:
+                logger.warning(f"Account {account}: Could not compute check-meter split, falling back to master")
         
         # Try full account
         if account in self.allocation_rules:
@@ -253,6 +263,65 @@ class AllocationEngine:
                 return self.allocation_rules[key]
         
         return None
+    
+    def _compute_check_meter_split(self, bill: Dict) -> Optional[List[Dict]]:
+        """
+        Compute AC/SW split from check-meter 6681757 for retail chillers.
+        
+        Check meter 6681757 is 散熱水泵電 (Sea Water Pump) = SW
+        The rest of consumption goes to AC (Commercial Air Conditioning)
+        
+        Formula:
+            SW_kwh = meter_6681757_consumption
+            Total_kwh = bill total kwh
+            SW% = SW_kwh / Total_kwh
+            AC% = 1 - SW%
+        
+        Returns:
+            List[{centre, percentage}] or None if check meter not found
+        """
+        CHECK_METER_NO = '6681757'
+        
+        # Get total kWh
+        total_kwh = bill.get('kwh', 0)
+        if total_kwh <= 0:
+            logger.warning(f"Bill has no kWh, cannot compute check-meter split")
+            return None
+        
+        # Find check meter 6681757
+        meters = bill.get('meters', [])
+        check_meter_kwh = None
+        
+        for meter in meters:
+            meter_no = str(meter.get('meter_no', ''))
+            if meter_no == CHECK_METER_NO:
+                check_meter_kwh = meter.get('consumption', 0)
+                logger.info(f"Found check meter {CHECK_METER_NO}: consumption={check_meter_kwh} kWh")
+                break
+        
+        if check_meter_kwh is None:
+            logger.warning(f"Check meter {CHECK_METER_NO} not found in bill meters")
+            return None
+        
+        if check_meter_kwh <= 0:
+            logger.warning(f"Check meter {CHECK_METER_NO} has zero consumption")
+            return None
+        
+        # Compute percentages
+        sw_pct = check_meter_kwh / total_kwh
+        ac_pct = 1.0 - sw_pct
+        
+        if ac_pct < 0 or sw_pct < 0 or ac_pct > 1 or sw_pct > 1:
+            logger.error(f"Invalid check-meter split: AC={ac_pct:.4f}, SW={sw_pct:.4f}")
+            return None
+        
+        logger.info(f"Computed check-meter split: AC={ac_pct:.4f} ({total_kwh - check_meter_kwh:.1f} kWh), "
+                   f"SW={sw_pct:.4f} ({check_meter_kwh:.1f} kWh)")
+        
+        return [
+            {'centre': 'AC', 'percentage': ac_pct},
+            {'centre': 'SW', 'percentage': sw_pct}
+        ]
     
     def _generate_summary(self) -> Dict[str, Dict]:
         """

@@ -121,10 +121,18 @@ class MasterWorkbookParser:
         """
         Parse Allocation sheet using openpyxl.
         
-        Expected structure (flexible - will auto-detect):
-        - Account/Meter column
-        - Cost centre columns with percentages
-        - May have header rows
+        Real Citybase structure (verified from April master):
+        - Row 3: Headers
+        - Column B: "Elect. Meter No.:" (may have merged cells)
+        - Column O: "Percentage:" (already computed)
+        - Column Q: "Allocated Cost Centre:" (long names like "Commercial - Chiller Plant")
+        
+        Multiple rows per meter if split across centres (Column B merged down).
+        
+        Example:
+            Row 4: Meter=9046064, Pct=1.0, Centre="Commercial - Chiller Plant"
+            Row 36: Meter=9044168, Pct=0.24, Centre="DC - Lifts /Escalators"
+            Row 37: Meter=(merged), Pct=0.09, Centre="DC - Lighting"
         """
         allocations = {}
         
@@ -133,90 +141,146 @@ class MasterWorkbookParser:
         if not rows:
             return allocations
         
-        # Try to find header row
-        header_row_idx = 0
-        for idx, row in enumerate(rows[:10]):  # Check first 10 rows
-            if any(str(cell).lower() in ['account', 'meter', 'acct'] for cell in row if cell):
+        # Find header row - look for "Elect. Meter No.:"
+        header_row_idx = None
+        for idx, row in enumerate(rows[:10]):
+            if any('meter' in str(cell).lower() for cell in row if cell):
                 header_row_idx = idx
+                logger.info(f"Found Allocation sheet header row at index {idx}")
                 break
         
-        headers = [str(cell).strip() if cell else '' for cell in rows[header_row_idx]]
+        if header_row_idx is None:
+            logger.warning("Could not find header row in Allocation sheet")
+            return allocations
         
-        # Find account/meter column
-        account_col_idx = None
+        # Find column positions from headers
+        headers = [str(cell).lower() if cell else '' for cell in rows[header_row_idx]]
+        
+        meter_col = None
+        percentage_col = None
+        centre_col = None
+        
         for idx, h in enumerate(headers):
-            if any(keyword in h.lower() for keyword in ['account', 'meter', 'acct', 'a/c']):
-                account_col_idx = idx
-                break
+            if 'meter' in h:
+                meter_col = idx
+                logger.info(f"Found meter column: {idx}")
+            elif 'percentage' in h:
+                percentage_col = idx
+                logger.info(f"Found percentage column: {idx}")
+            elif 'allocated' in h and 'centre' in h:
+                centre_col = idx
+                logger.info(f"Found centre column: {idx}")
         
-        if account_col_idx is None:
-            # Default to first column
-            account_col_idx = 0
+        # Default positions if not found in headers
+        if meter_col is None:
+            meter_col = 1  # Column B = index 1
+            logger.warning("Meter column not found in headers, using default: 1 (Column B)")
         
-        # Find cost centre columns (columns with FC, SW, AC, C, DC, etc.)
-        centre_cols = []
-        for idx, h in enumerate(headers):
-            if idx == account_col_idx:
-                continue
-            # Include ALL non-account columns as potential cost centres
-            # This handles both simple codes (AC, FC, SW, C, DC, OC, AO, CP, SA)
-            # and complex descriptions (Hotel/Commercial/SA (11), etc.)
-            if h and h.strip():  # Any non-empty header
-                centre_cols.append((idx, h))
+        # For percentage and centre columns, only use defaults if sheet has enough columns
+        max_col = len(headers) if headers else 0
         
-        # Parse data rows
-        for row in rows[header_row_idx + 1:]:
+        if percentage_col is None:
+            if max_col >= 15:  # Real Citybase structure
+                percentage_col = 14  # Column O = index 14
+                logger.warning("Percentage column not found in headers, using default: 14 (Column O)")
+            else:
+                # Small test workbook - can't parse
+                logger.error(f"Percentage column not found and sheet only has {max_col} columns (need 15+)")
+                return allocations
+        
+        if centre_col is None:
+            if max_col >= 17:  # Real Citybase structure
+                centre_col = 16  # Column Q = index 16
+                logger.warning("Centre column not found in headers, using default: 16 (Column Q)")
+            else:
+                # Small test workbook - can't parse
+                logger.error(f"Centre column not found and sheet only has {max_col} columns (need 17+)")
+                return allocations
+        
+        logger.info(f"Allocation sheet columns: meter={meter_col}, percentage={percentage_col}, centre={centre_col}")
+        
+        # Parse data rows - handle merged cells for meter column
+        current_meter = None
+        
+        for row_idx, row in enumerate(rows[header_row_idx + 1:], start=header_row_idx + 2):
             if not row or all(cell is None for cell in row):
                 continue
             
-            account = str(row[account_col_idx]) if row[account_col_idx] else None
-            if not account or account.lower() in ['none', 'total', '']:
+            # Get meter number (may be None if cell is merged)
+            meter_val = row[meter_col] if meter_col < len(row) else None
+            
+            if meter_val and not str(meter_val).startswith('#'):
+                # New meter found - update current_meter
+                meter = str(meter_val).strip()
+                # Remove ** suffix if present (9046787** -> 9046787)
+                meter = meter.rstrip('*').strip()
+                if meter and meter.lower() not in ['none', 'total']:
+                    current_meter = meter
+                    logger.debug(f"Row {row_idx}: New meter {current_meter}")
+            
+            # Skip if no current meter
+            if not current_meter:
                 continue
             
-            # Clean account number
-            account = account.strip().replace(' ', '')
+            # Get percentage from column O
+            pct_val = row[percentage_col] if percentage_col < len(row) else None
+            if pct_val is None or str(pct_val).startswith('#'):
+                continue
             
-            # Extract allocations for this account
-            account_allocations = []
-            total_pct = 0.0
-            
-            for col_idx, centre_name in centre_cols:
-                value = row[col_idx] if col_idx < len(row) else None
-                if value is None:
+            try:
+                pct = float(pct_val)
+                if pct <= 0:
                     continue
-                
-                # Try to parse as percentage
-                try:
-                    if isinstance(value, str):
-                        # Remove % sign and convert
-                        value = value.replace('%', '').strip()
-                        pct = float(value)
-                        # If value is > 1, assume it's a percentage (e.g. 50 = 50%)
-                        if pct > 1:
-                            pct = pct / 100.0
-                    else:
-                        pct = float(value)
-                        if pct > 1:
-                            pct = pct / 100.0
-                    
-                    if pct > 0:
-                        account_allocations.append({
-                            'centre': centre_name.strip(),
-                            'percentage': pct
-                        })
-                        total_pct += pct
-                except (ValueError, TypeError):
-                    continue
+            except (ValueError, TypeError):
+                continue
             
-            if account_allocations:
-                # Normalize if total is close to but not exactly 1.0
-                if 0.99 <= total_pct <= 1.01:
-                    # Normalize to exactly 1.0
-                    for alloc in account_allocations:
-                        alloc['percentage'] /= total_pct
+            # Get centre name from column Q
+            centre_val = row[centre_col] if centre_col < len(row) else None
+            if centre_val is None or str(centre_val).startswith('#'):
+                continue
+            
+            centre_full = str(centre_val).strip()
+            if not centre_full:
+                continue
+            
+            # Extract short code from long name
+            # "Commercial - Chiller Plant" -> "C"
+            # "DC - Lighting" -> "DC"
+            # "Office Accommodation - Chiller Plant" -> "AO"
+            centre_code = self._extract_centre_code_from_long_name(centre_full)
+            
+            # CRITICAL: Validate centre is not numeric
+            try:
+                float(centre_code)
+                logger.warning(f"Row {row_idx}: NUMERIC centre '{centre_code}' from '{centre_full}' - SKIPPING")
+                continue
+            except (ValueError, TypeError):
+                pass  # Good - not numeric
+            
+            # Add to meter allocations
+            if current_meter not in allocations:
+                allocations[current_meter] = []
+            
+            # Handle shared allocations (centre codes with "/")
+            if '/' in centre_code:
+                centre_codes = [c.strip() for c in centre_code.split('/')]
+                split_pct = pct / len(centre_codes)
                 
-                allocations[account] = account_allocations
+                for code in centre_codes:
+                    allocations[current_meter].append({
+                        'centre': code,
+                        'percentage': split_pct
+                    })
+                    logger.debug(f"Row {row_idx}: meter {current_meter}, centre {code} ({centre_full} split), pct {split_pct:.4f}")
+            else:
+                # Single centre
+                allocations[current_meter].append({
+                    'centre': centre_code,
+                    'percentage': pct
+                })
+                logger.debug(f"Row {row_idx}: meter {current_meter}, centre {centre_code} ({centre_full}), pct {pct:.4f}")
         
+        logger.info(f"Parsed {len(allocations)} meters from Allocation sheet")
         return allocations
     
     def _parse_ac_dept_sheet_openpyxl(self, sheet) -> Dict[str, List[Dict]]:
