@@ -30,60 +30,6 @@ class WorkbookUpdater:
     def __init__(self, metropolis_root: Path):
         self.metropolis_root = Path(metropolis_root).expanduser()
     
-    def _extract_primary_centre_code(self, centre_name: str) -> str:
-        """
-        Extract primary centre code from complex centre names.
-        
-        Examples:
-            "AC" -> "AC"
-            "FC" -> "FC"
-            "C" -> "C"
-            "Hotel/Commercial/SA (11)" -> "SA"
-            "Commercial/Office/SA (7)" -> "SA"
-            "SA/Commercial (16)" -> "SA"
-            "Hotel / Carpark(9)" -> fallback to "Carpark"
-            "Commercial" -> "Commercial"
-        
-        Strategy:
-        1. If it's already a simple 1-2 letter uppercase code, return as-is
-        2. Remove parenthetical reference numbers like "(11)"
-        3. Look for known simple centre codes (AC, AO, C, CP, DC, FC, O, OC, SA, SW) in segments
-        4. If found, return the first matching code
-        5. Otherwise extract last segment from slashes
-        """
-        centre_name = centre_name.strip()
-        
-        # Simple codes (1-2 uppercase letters) - return as-is
-        if len(centre_name) <= 2 and centre_name.isupper():
-            return centre_name
-        
-        # Check for parenthetical reference numbers like "(11)"
-        # Extract the text before the parenthesis
-        if '(' in centre_name:
-            # "Hotel/Commercial/SA (11)" -> "Hotel/Commercial/SA"
-            centre_name = centre_name.split('(')[0].strip()
-        
-        # Known simple centre codes
-        SIMPLE_CODES = ['AC', 'AO', 'C', 'CP', 'DC', 'FC', 'O', 'OC', 'SA', 'SW']
-        
-        # Check if any known code appears in the centre name
-        if '/' in centre_name:
-            # Split into segments and check each
-            segments = [s.strip() for s in centre_name.split('/') if s.strip()]
-            for segment in segments:
-                if segment.upper() in SIMPLE_CODES:
-                    return segment.upper()
-            # If no simple code found, return last segment
-            if segments:
-                return segments[-1]
-        
-        # No slashes - check if it's a known code
-        if centre_name.upper() in SIMPLE_CODES:
-            return centre_name.upper()
-        
-        # Return as-is for other cases (Commercial, Carpark, etc.)
-        return centre_name
-    
     def copy_previous_month_workbooks(
         self,
         current_month: str,  # YYYY-MM
@@ -409,43 +355,27 @@ class WorkbookUpdater:
             
             logger.info(f"Writing to month column {month_col_letter} (month {month_num})")
             
-            # Calculate total allocation per cost centre
-            # Map complex centre names to simple codes (AC, FC, SW, DC, etc.)
+            # Shared labels stay on their own rows. "Hotel / Commercial / SA(11)"
+            # is not added to SA, and "Commercial Common (2)" is not added to C.
+            from app.citybase_model import canonical_centre_key
             centre_totals = {}
             for alloc in allocations:
-                centre_raw = alloc['centre']
-                amount = alloc['amount']
-                
-                # Extract primary centre code from complex names
-                # Examples:
-                #   "AC" -> "AC"
-                #   "Hotel/Commercial/SA (11)" -> "SA"
-                #   "Commercial/Office/SA (7)" -> "SA"
-                #   "C" -> "C"
-                centre = self._extract_primary_centre_code(centre_raw)
-                
-                centre_totals[centre] = centre_totals.get(centre, 0) + amount
+                centre = canonical_centre_key(str(alloc['centre']))
+                centre_totals[centre] = centre_totals.get(centre, 0) + alloc['amount']
             
             logger.info(f"Aggregated allocation totals by centre: {centre_totals}")
             
             if not centre_totals:
                 logger.warning("No allocation totals to write - allocations list may be empty or invalid")
             
-            # Find rows for each cost centre by searching column A for centre names
-            # Common centres: FC, AC, SW, DC, OC, AO, CP, SA, C
             centre_rows = {}
-            
-            for row in year_grid_sheet.iter_rows(min_row=1, max_row=50, min_col=1, max_col=1):
+            for row in year_grid_sheet.iter_rows(min_row=1, max_row=80, min_col=1, max_col=1):
                 cell = row[0]
                 if cell.value:
-                    cell_val = str(cell.value).strip().upper()
-                    # Check if this cell contains a cost centre code
-                    for centre in ['FC', 'AC', 'SW', 'DC', 'OC', 'AO', 'CP', 'SA', 'C', 'O']:
-                        # Match exact or as part of longer description
-                        if cell_val == centre or cell_val.startswith(centre + ' ') or cell_val.startswith(centre + '-'):
-                            centre_rows[centre] = cell.row
-                            logger.info(f"Found centre {centre} at row {cell.row}")
-                            break
+                    key = canonical_centre_key(str(cell.value))
+                    if key not in centre_rows:
+                        centre_rows[key] = cell.row
+                        logger.info(f"Found centre {key!r} at row {cell.row}")
             
             # Write allocation totals to the month column
             for centre, total in centre_totals.items():
@@ -477,7 +407,8 @@ def process_month_end(
     previous_month: str,
     parsed_bills: List[Dict],
     allocation_rules: Dict[str, List[Dict]],
-    meter_log: Dict
+    meter_log: Dict,
+    master_path: Optional[Path] = None,
 ) -> Dict[str, Path]:
     """
     Process month-end: copy previous workbooks and update with current data.
@@ -494,9 +425,16 @@ def process_month_end(
         Dict mapping workbook type to updated file path
     """
     from app.allocation_engine import allocate_costs
-    
-    # Run allocation engine with meter_log for check-meter split
-    allocation_result = allocate_costs(parsed_bills, allocation_rules, meter_log)
+    from app.citybase_model import try_load_citybase
+
+    # The Citybase master (Allocation + AC DEPT + Elect Charge) is the
+    # calculation. Synthetic rule tables still go through the older engine.
+    model = try_load_citybase(str(master_path)) if master_path else None
+    if model:
+        logger.info(f"Allocating from Citybase master {master_path}")
+        allocation_result = model.allocate(parsed_bills, meter_log)
+    else:
+        allocation_result = allocate_costs(parsed_bills, allocation_rules, meter_log)
     allocations = allocation_result['allocations']
     
     updater = WorkbookUpdater(metropolis_root)

@@ -673,7 +673,8 @@ async def process_month_end():
             previous_month,
             parsed_bills,
             allocation_rules,
-            meter_log
+            meter_log,
+            master_path,
         )
         
         return {

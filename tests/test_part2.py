@@ -658,10 +658,10 @@ class TestWorkbookValueUpdates:
     
     def test_complex_centre_names_aggregate_correctly(self):
         """
-        Regression test: Complex centre names must aggregate to simple codes.
-        
-        Master workbook has centres like "Hotel/Commercial/SA (11)" which must
-        aggregate to "SA" row in Cost Sheet year-grid.
+        Shared centre labels land on their own year-grid rows.
+
+        "Hotel / Commercial / SA(11)" is not folded into SA, and a short
+        code such as C does not absorb "Commercial Common".
         """
         from app.workbook_updater import WorkbookUpdater
         import openpyxl
@@ -682,22 +682,26 @@ class TestWorkbookValueUpdates:
             grid_sheet['A3'] = 'SA'
             grid_sheet['A4'] = 'C'
             grid_sheet['A5'] = 'DC'
+            grid_sheet['A6'] = 'Hotel / Commercial / SA(11)'
+            grid_sheet['A7'] = 'Hotel/SA (13)'
+            grid_sheet['A8'] = 'SA/Commercial (16)'
+            grid_sheet['A9'] = 'Commercial Common (2)'
             
             wb_file = out_dir / 'Cost Sheet-2025-05.xlsx'
             wb.save(wb_file)
             wb.close()
             
-            # Allocations with complex centre names (like real master produces)
             allocations = [
                 {'centre': 'AC', 'amount': 10388.15, 'account': 'test1'},
                 {'centre': 'C', 'amount': 62705.08, 'account': 'test1'},
                 {'centre': 'DC', 'amount': 23428.44, 'account': 'test1'},
-                {'centre': 'Hotel/Commercial/SA (11)', 'amount': 421.15, 'account': 'test1'},  # Should -> SA
-                {'centre': 'Hotel/SA (13)', 'amount': 805.38, 'account': 'test1'},            # Should -> SA
-                {'centre': 'SA/Commercial (16)', 'amount': 731.04, 'account': 'test1'},       # Should -> SA
+                {'centre': 'Hotel / Commercial / SA', 'amount': 421.15, 'account': 'test1'},
+                {'centre': 'Hotel / SA', 'amount': 805.38, 'account': 'test1'},
+                {'centre': 'SA / Commercial', 'amount': 731.04, 'account': 'test1'},
+                {'centre': 'Commercial Common', 'amount': 2410.16, 'account': 'test1'},
+                {'centre': 'SA', 'amount': 166047.00, 'account': 'test2'},
             ]
             
-            # Update workbook
             updater = WorkbookUpdater(tmpdir)
             updater.update_cost_sheet_workbook(
                 wb_file,
@@ -707,26 +711,17 @@ class TestWorkbookValueUpdates:
                 meter_log={}
             )
             
-            # Verify complex names aggregated correctly
             wb_updated = openpyxl.load_workbook(wb_file)
-            grid_sheet_updated = wb_updated['01-12 2025']
+            grid = wb_updated['01-12 2025']
             
-            # AC should have its simple allocation
-            assert grid_sheet_updated['F2'].value == 10388.15, \
-                f"AC should be 10388.15, got {grid_sheet_updated['F2'].value}"
-            
-            # SA should have sum of all SA-related allocations
-            expected_sa = 421.15 + 805.38 + 731.04  # = 1957.57
-            assert abs(grid_sheet_updated['F3'].value - expected_sa) < 0.01, \
-                f"SA should be {expected_sa}, got {grid_sheet_updated['F3'].value}"
-            
-            # C should have its simple allocation
-            assert grid_sheet_updated['F4'].value == 62705.08, \
-                f"C should be 62705.08, got {grid_sheet_updated['F4'].value}"
-            
-            # DC should have its simple allocation
-            assert grid_sheet_updated['F5'].value == 23428.44, \
-                f"DC should be 23428.44, got {grid_sheet_updated['F5'].value}"
+            assert grid['F2'].value == 10388.15
+            assert grid['F3'].value == 166047.00
+            assert grid['F4'].value == 62705.08
+            assert grid['F5'].value == 23428.44
+            assert grid['F6'].value == 421.15
+            assert grid['F7'].value == 805.38
+            assert grid['F8'].value == 731.04
+            assert grid['F9'].value == 2410.16
             
             wb_updated.close()
     

@@ -219,10 +219,8 @@ class TestAllocationEngine(unittest.TestCase):
         rules = {
             '00776-78552-1': [
                 {'centre': 'C', 'percentage': 0.10},
-                {'centre': 'AC', 'percentage': 0.385},
-                {'centre': 'DC', 'percentage': 0.23159999999999997},
-                {'centre': 'OC', 'percentage': 0.020000000000000004},
-                {'centre': 'CP', 'percentage': 0.035},
+                {'centre': 'AC', 'percentage': 0.50},
+                {'centre': 'DC', 'percentage': 0.40},
             ]
         }
         
