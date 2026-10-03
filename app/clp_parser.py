@@ -138,6 +138,10 @@ def _append_meter(out_list, seen, meter_no, consumption, factor=1, previous=None
         'previous': previous,
         'present': present,
         'consumption': consumption,
+        # The first register row. A later negative row is the adjustment
+        # Elect Charge writes as its own term (82374+3035-0).
+        'primary': consumption,
+        'adjustment': 0,
     })
     seen.add(meter_no)
     return consumption
@@ -195,6 +199,7 @@ def _add_meter_units(meters, seen, meter_no, units, factor=1, previous=None, pre
         if meter['meter_no'] != meter_no:
             continue
         meter['consumption'] = meter['consumption'] + units
+        meter['adjustment'] = meter.get('adjustment', 0) + units
         return meter['consumption']
     return _append_meter(meters, seen, meter_no, units, factor, previous, present)
 
