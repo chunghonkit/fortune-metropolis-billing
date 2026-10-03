@@ -53,6 +53,7 @@ def canonical_centre_key(label: str) -> str:
     "Hotel/Commercial (10)" matches "Hotel / Commercial".
     """
     text = str(label).strip()
+    text = text.replace('／', '/').replace('（', '(').replace('）', ')')
     text = re.sub(r'\s*\(\d+\)\s*$', '', text).strip()
     if '/' in text:
         parts = [re.sub(r'\s+', ' ', part).strip() for part in text.split('/')]

@@ -34,6 +34,44 @@ import json
 import os
 import glob
 
+def _extract_chinese_meter_units(text, out):
+    """
+    Read meter units from a Chinese CLP 用電度數 block.
+
+    Example:
+        電錶號碼
+        9048406
+        161494.00
+        9024222
+        130752.00
+        總用電度數
+    """
+    seen = {str(meter.get('meter_no')) for meter in out.get('meters', [])}
+    added = 0.0
+    for block in re.findall(r'電錶號碼(.*?)總用電度數', text, re.S):
+        for meter_no, cons_s in re.findall(
+            r'(?<!\d)(\d{7,8})\s+([\d,]+(?:\.\d+)?)', block
+        ):
+            if meter_no in seen:
+                continue
+            try:
+                consumption = float(cons_s.replace(',', ''))
+            except ValueError:
+                continue
+            if consumption <= 0:
+                continue
+            out['meters'].append({
+                'meter_no': meter_no,
+                'factor': 1,
+                'previous': None,
+                'present': None,
+                'consumption': consumption,
+            })
+            seen.add(meter_no)
+            added += consumption
+    return added
+
+
 def parse_clp_bill(pdf_path):
     doc = fitz.open(pdf_path)
     full_text = "\n".join([page.get_text() for page in doc])
@@ -161,6 +199,11 @@ def parse_clp_bill(pdf_path):
             total_meter_consumption += cons
         except:
             continue
+
+    # Chinese bills list 電錶號碼 / 度數 instead of factor + previous + present.
+    # Retail chillers need each private meter's units (9024222 is the check-meter
+    # denominator). Do not substitute the building total for that one meter.
+    total_meter_consumption += _extract_chinese_meter_units(text, out)
 
     # --- ESTIMATED: Rule 17 Total Consumption ---
     if out["is_estimated"]:

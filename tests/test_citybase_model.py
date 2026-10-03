@@ -181,3 +181,71 @@ def test_may_check_meter_moves_o7_without_using_building_total():
     # A smaller SW share of meter 9024222 moves the account off April's 77.82 / 22.18.
     assert ac / (ac + sw) > 0.7782
     assert sw / (ac + sw) < 0.2218
+
+
+def test_chinese_bill_meters_feed_check_meter_denominator():
+    """9024222 units come from the 電錶號碼 block, not the building total."""
+    from app.clp_parser import _extract_chinese_meter_units
+
+    text = """
+    電錶號碼
+    度數
+    總數
+    9048406
+    80,000.00
+    9026169
+    50,000.00
+    9024222
+    130,752.00
+    9026183
+    1,000.00
+    總用電度數
+    261752.00
+    """
+    parsed = {'meters': []}
+    _extract_chinese_meter_units(text, parsed)
+    by_meter = {m['meter_no']: m['consumption'] for m in parsed['meters']}
+    assert by_meter['9024222'] == 130752
+    assert set(by_meter) == {'9048406', '9026169', '9024222', '9026183'}
+
+    bills = [{
+        'account': '55861-52267-1',
+        'total_amount': 500000,
+        'meters': parsed['meters'],
+    }]
+    meter_log = {'meter_no': '6681757', 'previous': 96323.1, 'present': 96504.6}
+    result = CitybaseModel(str(MASTER)).allocate(bills, meter_log)
+    ac = sum(a['amount'] for a in result['allocations']
+             if a['account'] == '55861-52267-1' and a['centre'] == 'AC')
+    sw = sum(a['amount'] for a in result['allocations']
+             if a['account'] == '55861-52267-1' and a['centre'] == 'SW')
+    # Frozen April Column C is 77.82 / 22.18. Live O7 ≈ 0.2221 moves this.
+    assert abs((ac / (ac + sw)) - 0.778194) > 0.01
+    assert abs(ac + sw - 500000) < 0.05
+
+
+def test_office_chillers_92_8_and_carpark_shared_rows_balance():
+    model = CitybaseModel(str(MASTER))
+    bills = [
+        {'account': '13639-58422-3', 'total_amount': 10000, 'meters': []},
+        {'account': '79292-23337-6', 'total_amount': 20000, 'meters': []},
+        {'account': '35204-69738-4', 'total_amount': 50000, 'meters': []},
+    ]
+    result = model.allocate(bills, {'meter_no': '6681757', 'previous': 1, 'present': 1})
+
+    def total(account, centre=None):
+        return sum(
+            a['amount'] for a in result['allocations']
+            if a['account'] == account and (centre is None or a['centre'] == centre)
+        )
+
+    assert abs(total('13639-58422-3', 'AO') - 9200) < 0.02
+    assert abs(total('13639-58422-3', 'OC') - 800) < 0.02
+    assert abs(total('79292-23337-6', 'AO') - 18400) < 0.02
+    assert abs(total('79292-23337-6', 'OC') - 1600) < 0.02
+    carpark_rows = [a for a in result['allocations'] if a['account'] == '35204-69738-4']
+    assert abs(sum(a['amount'] for a in carpark_rows) - 50000) < 0.05
+    centres = {a['centre'] for a in carpark_rows}
+    assert 'CP' in centres
+    assert 'Hotel / L8 Premises' in centres
+    assert 'Commercial Common' in centres

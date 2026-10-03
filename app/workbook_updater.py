@@ -368,14 +368,19 @@ class WorkbookUpdater:
             if not centre_totals:
                 logger.warning("No allocation totals to write - allocations list may be empty or invalid")
             
+            # Labels sit in column A on the real year grid. Some shared names
+            # are in the next column, so accept the first cell on the row that
+            # matches a centre we are about to write.
+            wanted = set(centre_totals)
             centre_rows = {}
-            for row in year_grid_sheet.iter_rows(min_row=1, max_row=80, min_col=1, max_col=1):
-                cell = row[0]
-                if cell.value:
+            for row in year_grid_sheet.iter_rows(min_row=1, max_row=80, min_col=1, max_col=4):
+                for cell in row:
+                    if not cell.value:
+                        continue
                     key = canonical_centre_key(str(cell.value))
-                    if key not in centre_rows:
+                    if key in wanted and key not in centre_rows:
                         centre_rows[key] = cell.row
-                        logger.info(f"Found centre {key!r} at row {cell.row}")
+                        logger.info(f"Found centre {key!r} at {cell.coordinate}")
             
             # Write allocation totals to the month column
             for centre, total in centre_totals.items():
@@ -424,17 +429,23 @@ def process_month_end(
     Returns:
         Dict mapping workbook type to updated file path
     """
-    from app.allocation_engine import allocate_costs
     from app.citybase_model import try_load_citybase
 
-    # The Citybase master (Allocation + AC DEPT + Elect Charge) is the
-    # calculation. Synthetic rule tables still go through the older engine.
-    model = try_load_citybase(str(master_path)) if master_path else None
-    if model:
-        logger.info(f"Allocating from Citybase master {master_path}")
-        allocation_result = model.allocate(parsed_bills, meter_log)
-    else:
-        allocation_result = allocate_costs(parsed_bills, allocation_rules, meter_log)
+    # Column C of AC DEPT is a historical header ("May-08 Charge"). Do not
+    # allocate May by those cached weights. The live split is the Citybase
+    # formula model: this month's bills, this month's check-meter dial, and
+    # the master formulas.
+    if not master_path:
+        raise RuntimeError('Citybase master workbook is required for month-end allocation')
+    model = try_load_citybase(str(master_path))
+    if model is None:
+        raise RuntimeError(
+            f'Could not read Citybase sheets Allocation / AC DEPT / Elect Charge from {master_path}'
+        )
+    logger.info(f'Allocating from Citybase master {master_path}')
+    allocation_result = model.allocate(parsed_bills, meter_log)
+    for warning in allocation_result.get('validation', {}).get('errors') or []:
+        logger.warning(warning)
     allocations = allocation_result['allocations']
     
     updater = WorkbookUpdater(metropolis_root)
