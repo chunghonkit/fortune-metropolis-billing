@@ -50,22 +50,29 @@ _READING_LINE = re.compile(
 _FIT = r'[Ff][Ii][Tt]'
 _UNITS = r'(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d{1,6})(?!\d)'
 _UNITS_LINE = re.compile(_METER + r'(?:\s+' + _FIT + r')?' + r'\s+' + _UNITS)
-# Bulk meter table on 55861. Fields are adjacent, separated by a slash
-# or by whitespace (PyMuPDF often drops the printed slash):
+# Bulk meter table. Fields are adjacent, separated by a slash or by
+# whitespace (PyMuPDF drops the printed slash and puts each cell on its
+# own line). Readings on a renewable meter can be shorter than 6 digits.
 #   9024222 / 24570099 / 24439330 / 1 / 130769
-#   9024222 24570099 24439330 1 130769
-# meter, present, previous, factor, units. The last field is the kWh.
+#   9115936(FiT) / 430616 / 423738 / 1 / 6878
+#   9134412 / 21454 / 21058 / 1 / -396
+# meter, present, previous, factor, units. The units field is the kWh,
+# and a later row for the same meter is an adjustment (zero or negative).
 _ROW_SEP = r'(?:\s*/\s*|\s+)'
-_ROW_READING = r'((?:\d{1,3}(?:,\d{3})+|\d{6,9})(?:\.\d+)?)'
-# The factor column is a number, or the word FiT on a renewable meter.
-# 9115936 / 5004808 / 5000000 / FiT / 4,808
+_ROW_READING = r'((?:\d{1,3}(?:,\d{3})+|\d{1,9})(?:\.\d+)?)'
+# The factor column is a number, or the word FiT. On the May retail bill
+# the word is glued to the meter id — "9115936(FiT)" — and the factor is 1.
 _METER_ROW = re.compile(
     r'(?<!\d)(\d{7,8})(?!\d)'
     + _ROW_SEP + _ROW_READING
     + _ROW_SEP + _ROW_READING
     + _ROW_SEP + r'(\d{1,3}(?:\.\d+)?|' + _FIT + r')'
     + _ROW_SEP + r'(' + _FIT + r'\s+)?'
-    + r'((?:\d{1,3}(?:,\d{3})+|\d{1,7})(?:\.\d+)?)(?!\d)'
+    + r'(-?(?:\d{1,3}(?:,\d{3})+|\d{1,7})(?:\.\d+)?)(?!\d)'
+)
+# "9115936(FiT)" is the meter id. The parentheses are not a field separator.
+_FIT_SUFFIX = re.compile(
+    r'(?<!\d)(\d{7,8})\s*[\(（]\s*' + _FIT + r'\s*[\)）]'
 )
 _TOKEN = re.compile(
     r'(?<!\d)(?P<meter>\d{7,8})(?!\d)'
@@ -182,6 +189,16 @@ def _extract_columnar_units(text, meters, seen, consumed):
         index = end if len(run) < 2 or len(numbers) < len(run) else number_end
 
 
+def _add_meter_units(meters, seen, meter_no, units, factor=1, previous=None, present=None):
+    """Add units onto a meter already read. A later row is an adjustment."""
+    for meter in meters:
+        if meter['meter_no'] != meter_no:
+            continue
+        meter['consumption'] = meter['consumption'] + units
+        return meter['consumption']
+    return _append_meter(meters, seen, meter_no, units, factor, previous, present)
+
+
 def _extract_meter_consumptions(text):
     """
     Meter kWh from a CLP bill.
@@ -189,6 +206,8 @@ def _extract_meter_consumptions(text):
     Tried in order, and only the immediate next tokens are used:
     1. Bulk table row: meter / present / previous / factor / units.
        The units field is the kWh (55861 prints 9024222 this way).
+       A renewable id is printed "9115936(FiT)"; a later row of the same
+       id carries a negative adjustment that belongs in that meter's kWh.
     2. English register line: meter, factor, previous, present
        (commas allowed). Consumption is (present − previous) × factor.
     3. The next token is the units, optionally after the word FiT
@@ -196,12 +215,14 @@ def _extract_meter_consumptions(text):
     4. A columnar 電錶號碼 / 度數 block whose meters are stacked apart
        from their units.
     """
-    text = _normalize_bill_text(text or '')
+    text = _FIT_SUFFIX.sub(r'\1', _normalize_bill_text(text or ''))
     meters = []
     seen = set()
     consumed = []
 
     for match in _METER_ROW.finditer(text):
+        if _overlaps(match.span(), consumed):
+            continue
         meter_no, first_s, second_s, factor_s, fit_tag, units_s = match.groups()
         fit_factor = factor_s.lower() == 'fit' or bool(fit_tag)
         try:
@@ -214,13 +235,23 @@ def _extract_meter_consumptions(text):
         if factor_value < 1 or factor_value > 100 or factor_value != int(factor_value):
             continue
         factor = int(factor_value)
-        # A numeric factor is a register row: units must be |present−previous|×factor.
-        # FiT in that column is the renewable flag; the units field is the kWh
-        # even when it is not the register difference.
+        # A numeric factor is a register row: |units| must be |present−previous|×factor.
+        # The units field keeps its sign (the RE block adjusts with -396, -2514).
+        # FiT in the factor column is the renewable flag; trust the units field.
         if not fit_factor:
             delta = abs(first - second) * factor
-            if abs(delta - units) > 1:
+            if abs(delta - abs(units)) > 1:
                 continue
+        if meter_no in seen:
+            # Keep the first positive read. A later negative (or zero) row is
+            # the adjustment the Elect Charge kWh formula subtracts. A later
+            # positive row is another register of the same id (on/off peak);
+            # it must be consumed so its readings are not stored as meters,
+            # and it must not be added on top of the private-meter kWh.
+            if units < 0:
+                _add_meter_units(meters, seen, meter_no, units)
+            consumed.append(match.span())
+            continue
         present, previous = (first, second) if first >= second else (second, first)
         if _append_meter(meters, seen, meter_no, units, factor, previous, present):
             consumed.append(match.span())

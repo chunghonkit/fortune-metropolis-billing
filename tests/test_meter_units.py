@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from app.citybase_model import CitybaseModel
+from app.citybase_model import CitybaseModel, _group_kwh, _kwh_index
 from app.clp_parser import _extract_meter_consumptions, parse_clp_bill
 
 MASTER = Path('/home/ubuntu/.cursor/projects/workspace/uploads/april-cost-allocation_f85f.xlsx')
@@ -88,6 +88,112 @@ def test_fit_factor_column_is_kept_for_the_retail_split():
     assert centres['Hotel / Commercial'] > 0
     assert centres['Hotel / SA'] > 0
     assert centres['SA / Commercial'] > 0
+
+
+def test_may_52167_pdf_text_keeps_fit_meters_and_adjustments():
+    """
+    Page 3 of the May 2025 52167 bill, as PyMuPDF get_text() returns it.
+
+    The renewable id is "9115936(FiT)" and the factor column is 1, not the
+    word FiT. Readings on 10220967 and 10353005 are five digits. The same
+    CLP meters appear again with a negative units field; that adjustment
+    belongs in the meter kWh. A group that still totals 20674 has dropped
+    9115936 and the -396 adjustment.
+    """
+    text = """
+    1. Energy (Units Consumed)
+    Meter Number
+    Present
+    Reading
+    Previous
+    Reading
+    Multi
+    Factor
+    Unit
+    Total
+    CLP:
+    9133719
+    2367664
+    2285290
+    1
+    82374
+    9134412
+    328032
+    307358
+    1
+    20674
+    9144186
+    1265730
+    1226775
+    1
+    38955
+    142003
+    Renewable Energy (RE) System:
+    9115936(FiT)
+    430616
+    423738
+    1
+    6878
+    9144880(FiT)
+    247408
+    233816
+    1
+    13592
+    10220967(FiT)
+    89277
+    86242
+    1
+    3035
+    10353005(FiT)
+    57345
+    54883
+    1
+    2462
+    9133719
+    411
+    411
+    1
+    0
+    9134412
+    21454
+    21058
+    1
+    -396
+    9144186
+    39648
+    37134
+    1
+    -2514
+    23057
+    Total Units Consumed
+    165060
+    """
+    found = _by_meter(text)
+    assert found['9133719'] == 82374
+    assert found['9134412'] == 20674 - 396
+    assert found['9144186'] == 38955 - 2514
+    assert found['9115936'] == 6878
+    assert found['9144880'] == 13592
+    assert found['10220967'] == 3035
+    assert found['10353005'] == 2462
+    assert '142003' not in found
+    assert '23057' not in found
+    assert 165060 not in found.values()
+
+    bills = [{
+        'account': '52167-13569-2',
+        'total_amount': 144373,
+        'fit_amount': -90276,
+        'meters': _extract_meter_consumptions(text),
+    }]
+    model = CitybaseModel(str(MASTER))
+    index = _kwh_index(bills, '52167-13569-2')
+    by_row = {row: _group_kwh(meters, index) for row, meters in model.fit_groups}
+    # Row 9 is 9134412 + 9115936, not 9134412 alone.
+    assert by_row[9] == (20674 - 396) + 6878
+    assert by_row[8] == 82374 + 3035
+    assert by_row[13] == (38955 - 2514) + 13592 + 2462
+    assert sum(by_row.values()) == 165060
 
 
 def test_may_chiller_units_still_set_o7():
