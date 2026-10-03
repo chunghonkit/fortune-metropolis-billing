@@ -363,7 +363,7 @@ class MasterWorkbookParser:
         headers = [str(cell) if cell else '' for cell in rows[header_row_idx]]
         
         account_col = None
-        charge_col = None  # Column C or first "Charge" column
+        charge_col = 2  # HARDCODE: Always use Column C (index 2) for charges
         centre_col = None
         
         for idx, h in enumerate(headers):
@@ -371,17 +371,15 @@ class MasterWorkbookParser:
             if ('meter' in h_lower or 'account' in h_lower or 'acct' in h_lower) and account_col is None:
                 account_col = idx
                 logger.info(f"Found account column: {idx}")
-            elif 'charge' in h_lower and 'allocated' not in h_lower and charge_col is None:
-                charge_col = idx
-                logger.info(f"Found charge column: {idx} ({h})")
             elif 'allocated' in h_lower and 'centre' in h_lower and centre_col is None:
                 centre_col = idx
                 logger.info(f"Found centre column: {idx}")
         
-        # Fallback to Column C (index 2) if no "Charge" header found
-        if charge_col is None:
-            charge_col = 2
-            logger.warning(f"No charge column found in headers, using Column C (index 2)")
+        # Log which charge column we're using
+        if charge_col < len(headers):
+            logger.info(f"Using charge column: {charge_col} ({headers[charge_col]})")
+        else:
+            logger.info(f"Using charge column: {charge_col} (Column C)")
         
         if centre_col is None:
             logger.warning("Centre column not found, cannot parse AC DEPT")
