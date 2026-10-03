@@ -495,8 +495,8 @@ def process_month_end(
     """
     from app.allocation_engine import allocate_costs
     
-    # Run allocation engine
-    allocation_result = allocate_costs(parsed_bills, allocation_rules)
+    # Run allocation engine with meter_log for check-meter split
+    allocation_result = allocate_costs(parsed_bills, allocation_rules, meter_log)
     allocations = allocation_result['allocations']
     
     updater = WorkbookUpdater(metropolis_root)

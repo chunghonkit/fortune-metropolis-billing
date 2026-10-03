@@ -68,14 +68,16 @@ class AllocationEngine:
         
         logger.info(f"FC 100% hard rule: {len(fc_accounts)} accounts")
     
-    def __init__(self, allocation_rules: Dict[str, List[Dict]]):
+    def __init__(self, allocation_rules: Dict[str, List[Dict]], meter_log: Dict = None):
         """
         Initialize allocation engine.
         
         Args:
             allocation_rules: Dict mapping account/meter -> List[{centre, percentage}]
+            meter_log: Optional dict with check-meter readings (for AC/SW split)
         """
         self.allocation_rules = allocation_rules
+        self.meter_log = meter_log
         self.allocations = []
         self.validation_errors = []
         self.config = load_config()
@@ -271,8 +273,10 @@ class AllocationEngine:
         Check meter 6681757 is 散熱水泵電 (Sea Water Pump) = SW
         The rest of consumption goes to AC (Commercial Air Conditioning)
         
+        Uses meter_log (user-entered readings), not bill meters array.
+        
         Formula:
-            SW_kwh = meter_6681757_consumption
+            SW_kwh = present - previous (from meter_log)
             Total_kwh = bill total kwh
             SW% = SW_kwh / Total_kwh
             AC% = 1 - SW%
@@ -280,31 +284,36 @@ class AllocationEngine:
         Returns:
             List[{centre, percentage}] or None if check meter not found
         """
+        if not self.meter_log:
+            logger.warning(f"No meter_log provided, cannot compute check-meter split")
+            return None
+        
         CHECK_METER_NO = '6681757'
         
-        # Get total kWh
+        # Verify this is the check meter
+        if self.meter_log.get('meter_no') != CHECK_METER_NO:
+            logger.warning(f"Meter log is for {self.meter_log.get('meter_no')}, expected {CHECK_METER_NO}")
+            return None
+        
+        # Get readings from meter_log
+        previous = self.meter_log.get('previous')
+        present = self.meter_log.get('present')
+        
+        if previous is None or present is None:
+            logger.warning(f"Meter log incomplete: previous={previous}, present={present}")
+            return None
+        
+        # Compute check meter consumption
+        check_meter_kwh = present - previous
+        
+        if check_meter_kwh <= 0:
+            logger.warning(f"Check meter {CHECK_METER_NO} has non-positive consumption: {check_meter_kwh}")
+            return None
+        
+        # Get total kWh from bill
         total_kwh = bill.get('kwh', 0)
         if total_kwh <= 0:
             logger.warning(f"Bill has no kWh, cannot compute check-meter split")
-            return None
-        
-        # Find check meter 6681757
-        meters = bill.get('meters', [])
-        check_meter_kwh = None
-        
-        for meter in meters:
-            meter_no = str(meter.get('meter_no', ''))
-            if meter_no == CHECK_METER_NO:
-                check_meter_kwh = meter.get('consumption', 0)
-                logger.info(f"Found check meter {CHECK_METER_NO}: consumption={check_meter_kwh} kWh")
-                break
-        
-        if check_meter_kwh is None:
-            logger.warning(f"Check meter {CHECK_METER_NO} not found in bill meters")
-            return None
-        
-        if check_meter_kwh <= 0:
-            logger.warning(f"Check meter {CHECK_METER_NO} has zero consumption")
             return None
         
         # Compute percentages
@@ -315,8 +324,9 @@ class AllocationEngine:
             logger.error(f"Invalid check-meter split: AC={ac_pct:.4f}, SW={sw_pct:.4f}")
             return None
         
-        logger.info(f"Computed check-meter split: AC={ac_pct:.4f} ({total_kwh - check_meter_kwh:.1f} kWh), "
-                   f"SW={sw_pct:.4f} ({check_meter_kwh:.1f} kWh)")
+        logger.info(f"Computed check-meter split from meter_log: "
+                   f"previous={previous:.1f}, present={present:.1f}, delta={check_meter_kwh:.1f} kWh, "
+                   f"total={total_kwh:.1f} kWh → AC={ac_pct:.4f}, SW={sw_pct:.4f}")
         
         return [
             {'centre': 'AC', 'percentage': ac_pct},
@@ -355,16 +365,17 @@ class AllocationEngine:
         return summary
 
 
-def allocate_costs(parsed_bills: List[Dict], allocation_rules: Dict[str, List[Dict]]) -> Dict:
+def allocate_costs(parsed_bills: List[Dict], allocation_rules: Dict[str, List[Dict]], meter_log: Dict = None) -> Dict:
     """
     Convenience function to allocate costs.
     
     Args:
         parsed_bills: List of parsed bill dicts
         allocation_rules: Allocation rules from master workbook
+        meter_log: Optional dict with check-meter readings for AC/SW split
         
     Returns:
         Allocation results dict
     """
-    engine = AllocationEngine(allocation_rules)
+    engine = AllocationEngine(allocation_rules, meter_log=meter_log)
     return engine.allocate_bills(parsed_bills)
