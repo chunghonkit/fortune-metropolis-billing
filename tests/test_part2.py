@@ -240,5 +240,170 @@ class TestWorkbookUpdate:
             wb_check.close()
 
 
+class TestWorkbookValueUpdates:
+    """Test that workbook updates actually write values"""
+    
+    def test_cost_allocation_elect_charge_update(self):
+        """Test writing check-meter readings to Cost Allocation Elect Charge sheet"""
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        from openpyxl.styles import Font
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create a Cost Allocation workbook with Elect Charge sheet
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)  # Remove default sheet
+            
+            # Create Elect Charge sheet with meter 6681757
+            elect_sheet = wb.create_sheet("Elect Charge")
+            
+            # Add headers
+            elect_sheet['A1'] = 'Meter No.'
+            elect_sheet['B1'] = 'Description'
+            elect_sheet['C1'] = 'Previous'
+            elect_sheet['D1'] = 'Present'
+            elect_sheet['E1'] = 'Delta'
+            
+            # Make headers bold
+            for cell in elect_sheet[1]:
+                cell.font = Font(bold=True)
+            
+            # Add meter 6681757 row (row 2)
+            elect_sheet['A2'] = '6681757'
+            elect_sheet['B2'] = '散熱水泵電'
+            elect_sheet['C2'] = 95966.6  # Old value
+            elect_sheet['D2'] = 96323.1  # Old value
+            elect_sheet['E2'] = 356.5    # Old delta
+            
+            # Save to file
+            wb_file = out_dir / 'Cost Allocation - Electricity 2007-2.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Prepare meter log with new values
+            meter_log = {
+                'meter_no': '6681757',
+                'previous': 96323.1,
+                'present': 96504.6,
+            }
+            
+            # Update the workbook
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_allocation_workbook(
+                wb_file,
+                allocations=[],
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log=meter_log
+            )
+            
+            # Verify values were updated
+            wb_updated = openpyxl.load_workbook(wb_file)
+            elect_sheet_updated = wb_updated['Elect Charge']
+            
+            # Check new values were written
+            assert elect_sheet_updated['C2'].value == 96323.1, f"Previous should be 96323.1, got {elect_sheet_updated['C2'].value}"
+            assert elect_sheet_updated['D2'].value == 96504.6, f"Present should be 96504.6, got {elect_sheet_updated['D2'].value}"
+            
+            # Check delta was calculated
+            expected_delta = round(96504.6 - 96323.1, 1)
+            assert elect_sheet_updated['E2'].value == expected_delta, f"Delta should be {expected_delta}, got {elect_sheet_updated['E2'].value}"
+            
+            # Verify formatting preserved (bold headers)
+            assert elect_sheet_updated['A1'].font.bold == True
+            
+            wb_updated.close()
+    
+    def test_cost_sheet_year_grid_update(self):
+        """Test writing allocation totals to Cost Sheet year-grid month column"""
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        from openpyxl.styles import Font
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create a Cost Sheet workbook with year-grid sheet
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            # Create year-grid sheet "01-12 2025"
+            grid_sheet = wb.create_sheet("01-12 2025")
+            
+            # Add headers: A=Cost Centre, B=Jan, C=Feb, ..., F=May
+            grid_sheet['A1'] = 'Cost Centre'
+            grid_sheet['B1'] = 'Jan'
+            grid_sheet['C1'] = 'Feb'
+            grid_sheet['D1'] = 'Mar'
+            grid_sheet['E1'] = 'Apr'
+            grid_sheet['F1'] = 'May'
+            
+            # Add cost centre rows
+            grid_sheet['A2'] = 'FC'
+            grid_sheet['A3'] = 'AC'
+            grid_sheet['A4'] = 'SW'
+            grid_sheet['A5'] = 'DC'
+            
+            # Make headers bold
+            for cell in grid_sheet[1]:
+                cell.font = Font(bold=True)
+            
+            # Add some April (column E) values
+            grid_sheet['E2'] = 50000  # FC Apr
+            grid_sheet['E3'] = 300000  # AC Apr
+            grid_sheet['E4'] = 150000  # SW Apr
+            
+            # Save to file
+            wb_file = out_dir / 'Cost Sheet-2025-05.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Prepare allocations with totals per centre
+            allocations = [
+                {'centre': 'FC', 'amount': 70610.50, 'account': 'test1'},
+                {'centre': 'AC', 'amount': 200000.00, 'account': 'test2'},
+                {'centre': 'AC', 'amount': 222972.67, 'account': 'test3'},  # Total AC = 422972.67
+                {'centre': 'SW', 'amount': 150000.00, 'account': 'test4'},
+                {'centre': 'SW', 'amount': 99629.75, 'account': 'test5'},   # Total SW = 249629.75
+                {'centre': 'DC', 'amount': 50000.00, 'account': 'test6'},
+            ]
+            
+            # Update the workbook
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_sheet_workbook(
+                wb_file,
+                allocations=allocations,
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log={}
+            )
+            
+            # Verify values were written to May column (F)
+            wb_updated = openpyxl.load_workbook(wb_file)
+            grid_sheet_updated = wb_updated['01-12 2025']
+            
+            # Check May column (F) has correct totals
+            assert grid_sheet_updated['F2'].value == 70610.50, f"FC May should be 70610.50, got {grid_sheet_updated['F2'].value}"
+            assert grid_sheet_updated['F3'].value == 422972.67, f"AC May should be 422972.67, got {grid_sheet_updated['F3'].value}"
+            assert grid_sheet_updated['F4'].value == 249629.75, f"SW May should be 249629.75, got {grid_sheet_updated['F4'].value}"
+            assert grid_sheet_updated['F5'].value == 50000.00, f"DC May should be 50000.00, got {grid_sheet_updated['F5'].value}"
+            
+            # Verify April column (E) unchanged
+            assert grid_sheet_updated['E2'].value == 50000
+            assert grid_sheet_updated['E3'].value == 300000
+            assert grid_sheet_updated['E4'].value == 150000
+            
+            # Verify formatting preserved (bold headers)
+            assert grid_sheet_updated['A1'].font.bold == True
+            
+            wb_updated.close()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

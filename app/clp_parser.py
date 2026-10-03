@@ -117,11 +117,24 @@ def parse_clp_bill(pdf_path):
     else:
         out["bill_type"] = out["tariff"]
 
-    # Amounts
+    # Amounts - support both English and Chinese
     m = re.search(r'Total Amount\s+\$?([\d,]+\.\d{2})', text)
-    if m: out["total_amount"] = float(m.group(1).replace(",", ""))
+    if m:
+        out["total_amount"] = float(m.group(1).replace(",", ""))
+    else:
+        # Try Chinese format: 應繳總數 $83,897.00
+        m = re.search(r'應繳總數\s+\$?([\d,]+\.\d{2})', text)
+        if m:
+            out["total_amount"] = float(m.group(1).replace(",", ""))
+    
     m = re.search(r'Deposit:\s*\$?([\d,]+\.\d{2})', text)
-    if m: out["deposit"] = float(m.group(1).replace(",", ""))
+    if m:
+        out["deposit"] = float(m.group(1).replace(",", ""))
+    else:
+        # Try Chinese format: 按金 $340,000.00
+        m = re.search(r'按金\s+\$?([\d,]+\.\d{2})', text)
+        if m:
+            out["deposit"] = float(m.group(1).replace(",", ""))
 
     # --- METERS: Rule 3 Multi Factor ---
     # Pattern: MeterNo (7 digits) + Factor + Previous + Present on consecutive lines/spaces

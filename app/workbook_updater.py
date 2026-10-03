@@ -147,57 +147,130 @@ class WorkbookUpdater:
         workbook_path: Path,
         allocations: List[Dict],
         billing_month: str,
-        parsed_bills: List[Dict]
+        parsed_bills: List[Dict],
+        meter_log: Dict
     ) -> Path:
         """
         Update Cost Allocation workbook with current month's allocation data.
         
         Writes computed VALUES (not formulas) to preserve formatting.
         
+        Key updates:
+        - Elect Charge sheet: check-meter 6681757 previous/present/delta
+        - Title row: update month
+        
         Args:
             workbook_path: Path to Cost Allocation workbook (already copied)
             allocations: List of allocation dicts from allocation engine
             billing_month: YYYY-MM
             parsed_bills: List of parsed bills
+            meter_log: Dict with check-meter readings
             
         Returns:
             Updated workbook path (same as input)
         """
-        wb = openpyxl.load_workbook(workbook_path)
+        # Check if .xls - openpyxl only supports .xlsx
+        if workbook_path.suffix.lower() == '.xls':
+            logger.warning(f"Cost Allocation is .xls format - openpyxl requires .xlsx. "
+                          f"Consider converting with LibreOffice first.")
+            # For now, just update the .xls file we can
+            # In production, you'd use xlrd/xlwt or convert with soffice
         
-        # Find Allocation sheet or main data sheet
-        sheet = None
-        for name in wb.sheetnames:
-            if 'allocation' in name.lower() or 'summary' in name.lower():
-                sheet = wb[name]
+        try:
+            wb = openpyxl.load_workbook(workbook_path)
+        except Exception as e:
+            logger.error(f"Failed to load Cost Allocation workbook: {e}")
+            # If it's .xls and fails, just log and return
+            return workbook_path
+        
+        # Update title/header to show current month
+        # Try to find and update any sheet that might have the main title
+        for sheet in wb.worksheets:
+            # Check A1 for title
+            if sheet['A1'].value and 'Cost Allocation' in str(sheet['A1'].value):
+                sheet['A1'] = f"Cost Allocation - {billing_month}"
+                logger.info(f"Updated title in sheet '{sheet.title}' A1")
+        
+        # Find Elect Charge sheet (check-meter 6681757)
+        elect_charge_sheet = None
+        for sheet in wb.worksheets:
+            # Look for sheet with "Elect" or "Charge" in name
+            if 'elect' in sheet.title.lower() or 'charge' in sheet.title.lower():
+                elect_charge_sheet = sheet
                 break
         
-        if sheet is None:
-            # Use first sheet
-            sheet = wb.active
-        
-        logger.info(f"Updating Cost Allocation sheet: {sheet.title}")
-        
-        # Group allocations by account
-        allocations_by_account = {}
-        for alloc in allocations:
-            account = alloc['account']
-            if account not in allocations_by_account:
-                allocations_by_account[account] = []
-            allocations_by_account[account].append(alloc)
-        
-        # Find data rows and update allocation values
-        # This is a simplified update - in practice, you'd map to specific cells
-        # based on the template structure
-        
-        # For now, just update the workbook metadata to mark it as updated
-        sheet['A1'] = f"Cost Allocation - {billing_month}"
+        if elect_charge_sheet and meter_log.get('previous') is not None and meter_log.get('present') is not None:
+            logger.info(f"Found Elect Charge sheet: {elect_charge_sheet.title}")
+            
+            # Try to find meter 6681757 row by searching for the meter number
+            meter_no = meter_log.get('meter_no', '6681757')
+            meter_row = None
+            
+            # Search for meter number in the sheet
+            for row in elect_charge_sheet.iter_rows(min_row=1, max_row=100, min_col=1, max_col=10):
+                for cell in row:
+                    if cell.value and str(meter_no) in str(cell.value):
+                        meter_row = cell.row
+                        logger.info(f"Found meter {meter_no} at row {meter_row}")
+                        break
+                if meter_row:
+                    break
+            
+            # If found meter row, try to write readings
+            # Common pattern: Previous, Present, Delta in adjacent columns
+            # User mentioned BR31/BS31/BQ31, so columns might be around BQ-BS (columns 69-71)
+            if meter_row:
+                # Try common column positions for meter readings
+                # BQ=69, BR=70, BS=71 (0-indexed: 68, 69, 70)
+                # But let's search for "Previous" and "Present" headers first
+                
+                # Search for column headers in row above meter or in header row
+                prev_col = None
+                present_col = None
+                delta_col = None
+                
+                # Check a few rows above meter_row for headers
+                for header_row_idx in range(max(1, meter_row - 5), meter_row):
+                    row_cells = list(elect_charge_sheet.iter_rows(
+                        min_row=header_row_idx, max_row=header_row_idx, 
+                        min_col=1, max_col=100, values_only=False
+                    ))[0]
+                    
+                    for cell in row_cells:
+                        if cell.value:
+                            val_lower = str(cell.value).lower()
+                            if 'previous' in val_lower or 'prev' in val_lower:
+                                prev_col = cell.column
+                            elif 'present' in val_lower:
+                                present_col = cell.column
+                            elif 'delta' in val_lower or 'diff' in val_lower:
+                                delta_col = cell.column
+                
+                # If we found the columns, write the values
+                if prev_col and present_col:
+                    elect_charge_sheet.cell(row=meter_row, column=prev_col).value = meter_log['previous']
+                    elect_charge_sheet.cell(row=meter_row, column=present_col).value = meter_log['present']
+                    
+                    if delta_col:
+                        delta = round(meter_log['present'] - meter_log['previous'], 1)
+                        elect_charge_sheet.cell(row=meter_row, column=delta_col).value = delta
+                    
+                    logger.info(f"Updated meter readings at row {meter_row}: "
+                              f"prev={meter_log['previous']}, present={meter_log['present']}")
+                else:
+                    logger.warning(f"Could not find Previous/Present columns for meter {meter_no}")
+            else:
+                logger.warning(f"Could not find meter {meter_no} in Elect Charge sheet")
         
         # Save the updated workbook
-        wb.save(workbook_path)
-        wb.close()
+        try:
+            wb.save(workbook_path)
+            wb.close()
+            logger.info(f"Updated Cost Allocation workbook: {workbook_path}")
+        except Exception as e:
+            logger.error(f"Failed to save Cost Allocation workbook: {e}")
+            wb.close()
         
-        logger.info(f"Updated Cost Allocation workbook: {workbook_path}")
         return workbook_path
     
     def update_cost_sheet_workbook(
@@ -212,49 +285,109 @@ class WorkbookUpdater:
         Update Cost Sheet workbook with current month's data.
         
         Updates:
+        - Year-grid sheet: month column with allocation totals per cost centre
         - Allocation % for each account/cost centre
         - Separated Amount (computed values)
-        - Check-meter 6681757 readings
+        - Check-meter 6681757 readings if present
         
         Writes VALUES not formulas to preserve formatting.
         
         Args:
             workbook_path: Path to Cost Sheet workbook (already copied)
             allocations: List of allocation dicts
-            billing_month: YYYY-MM
+            billing_month: YYYY-MM (e.g., "2025-05")
             parsed_bills: List of parsed bills
             meter_log: Dict with check-meter readings
             
         Returns:
             Updated workbook path (same as input)
         """
-        wb = openpyxl.load_workbook(workbook_path)
+        # Check if .xls - openpyxl only supports .xlsx
+        if workbook_path.suffix.lower() == '.xls':
+            logger.warning(f"Cost Sheet is .xls format - openpyxl requires .xlsx. "
+                          f"Consider converting with LibreOffice first.")
+            # For now, just update what we can
         
-        # Find main sheet
-        sheet = wb.active
+        try:
+            wb = openpyxl.load_workbook(workbook_path)
+        except Exception as e:
+            logger.error(f"Failed to load Cost Sheet workbook: {e}")
+            return workbook_path
         
-        logger.info(f"Updating Cost Sheet: {sheet.title}")
+        # Update title/header to show current month
+        for sheet in wb.worksheets:
+            if sheet['A1'].value and 'Cost Sheet' in str(sheet['A1'].value):
+                sheet['A1'] = f"Cost Sheet - {billing_month}"
+                logger.info(f"Updated title in sheet '{sheet.title}' A1")
         
-        # Group allocations by account and centre
-        allocations_by_account_centre = {}
-        for alloc in allocations:
-            account = alloc['account']
-            centre = alloc['centre']
-            key = f"{account}_{centre}"
-            allocations_by_account_centre[key] = alloc
+        # Find year-grid sheet (might contain "01-12", year, or be named after year range)
+        year_grid_sheet = None
+        billing_year = billing_month.split('-')[0]
         
-        # Update allocation % and amounts
-        # This is a simplified update - in practice, you'd map to specific cells
-        # based on the template structure and find the right rows/columns
+        for sheet in wb.worksheets:
+            sheet_name_lower = sheet.title.lower()
+            # Look for sheets with year range like "01-12 2025" or just the year
+            if ('01-12' in sheet_name_lower or 
+                billing_year in sheet.title or
+                'year' in sheet_name_lower or
+                'grid' in sheet_name_lower):
+                year_grid_sheet = sheet
+                logger.info(f"Found year-grid sheet: {sheet.title}")
+                break
         
-        # Update metadata
-        sheet['A1'] = f"Cost Sheet - {billing_month}"
+        if year_grid_sheet:
+            # Calculate which column for this month (1=Jan=B, 2=Feb=C, ..., 5=May=F)
+            month_num = int(billing_month.split('-')[1])  # Extract month number
+            # Assuming column A is labels, column B is Jan (month 1), C is Feb (month 2), etc.
+            month_col = month_num + 1  # B=2, C=3, D=4, E=5, F=6 for May
+            month_col_letter = openpyxl.utils.get_column_letter(month_col)
+            
+            logger.info(f"Writing to month column {month_col_letter} (month {month_num})")
+            
+            # Calculate total allocation per cost centre
+            centre_totals = {}
+            for alloc in allocations:
+                centre = alloc['centre']
+                amount = alloc['amount']
+                centre_totals[centre] = centre_totals.get(centre, 0) + amount
+            
+            # Find rows for each cost centre by searching column A for centre names
+            # Common centres: FC, AC, SW, DC, OC, AO, CP, SA, C
+            centre_rows = {}
+            
+            for row in year_grid_sheet.iter_rows(min_row=1, max_row=50, min_col=1, max_col=1):
+                cell = row[0]
+                if cell.value:
+                    cell_val = str(cell.value).strip().upper()
+                    # Check if this cell contains a cost centre code
+                    for centre in ['FC', 'AC', 'SW', 'DC', 'OC', 'AO', 'CP', 'SA', 'C']:
+                        # Match exact or as part of longer description
+                        if cell_val == centre or cell_val.startswith(centre + ' ') or cell_val.startswith(centre + '-'):
+                            centre_rows[centre] = cell.row
+                            logger.info(f"Found centre {centre} at row {cell.row}")
+                            break
+            
+            # Write allocation totals to the month column
+            for centre, total in centre_totals.items():
+                if centre in centre_rows:
+                    row = centre_rows[centre]
+                    cell = year_grid_sheet.cell(row=row, column=month_col)
+                    cell.value = round(total, 2)
+                    logger.info(f"Wrote {centre} total ${total:.2f} to {month_col_letter}{row}")
+                else:
+                    logger.warning(f"Could not find row for centre {centre}")
+        else:
+            logger.warning("Could not find year-grid sheet in Cost Sheet")
         
         # Save the updated workbook
-        wb.save(workbook_path)
-        wb.close()
+        try:
+            wb.save(workbook_path)
+            wb.close()
+            logger.info(f"Updated Cost Sheet workbook: {workbook_path}")
+        except Exception as e:
+            logger.error(f"Failed to save Cost Sheet workbook: {e}")
+            wb.close()
         
-        logger.info(f"Updated Cost Sheet workbook: {workbook_path}")
         return workbook_path
 
 
@@ -302,7 +435,8 @@ def process_month_end(
             copied_files['cost_allocation'],
             allocations,
             current_month,
-            parsed_bills
+            parsed_bills,
+            meter_log
         )
     
     # Update Cost Sheet if copied
