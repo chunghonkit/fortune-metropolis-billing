@@ -729,6 +729,117 @@ class TestWorkbookValueUpdates:
                 f"DC should be 23428.44, got {grid_sheet_updated['F5'].value}"
             
             wb_updated.close()
+    
+    def test_allocation_keyed_by_centre_not_amount(self):
+        """
+        Regression test: Allocation must be keyed by centre code, not amount.
+        
+        May 2025 rerun showed allocation totals keyed by dollar amounts
+        (e.g., 216328.807591692) instead of centre codes (FC, AC, SW).
+        This caused year-grid column to remain empty.
+        """
+        from app.workbook_updater import WorkbookUpdater
+        import openpyxl
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            out_dir = tmpdir / '2025-05' / 'out'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create Cost Sheet with year-grid
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            grid_sheet = wb.create_sheet("01-12 2025")
+            grid_sheet['A1'] = 'Cost Centre'
+            grid_sheet['F1'] = 'May'
+            grid_sheet['A4'] = 'FC'
+            grid_sheet['A5'] = 'AC'
+            grid_sheet['A6'] = 'SW'
+            
+            wb_file = out_dir / 'Cost Sheet-2025-05.xlsx'
+            wb.save(wb_file)
+            wb.close()
+            
+            # Correct allocations: keyed by centre CODE
+            correct_allocations = [
+                {'centre': 'FC', 'amount': 70610.00, 'account': '82805-94744-7'},
+                {'centre': 'AC', 'amount': 200000.00, 'account': '55861-52267-1'},
+                {'centre': 'AC', 'amount': 222972.67, 'account': '52167-13569-2'},  # Total AC = 422972.67
+                {'centre': 'SW', 'amount': 150000.00, 'account': '55861-52267-1'},
+                {'centre': 'SW', 'amount': 99629.75, 'account': '23529-59279-9'},   # Total SW = 249629.75
+            ]
+            
+            # Update workbook with correct allocations
+            updater = WorkbookUpdater(tmpdir)
+            updater.update_cost_sheet_workbook(
+                wb_file,
+                allocations=correct_allocations,
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log={}
+            )
+            
+            # Verify values written correctly
+            wb_updated = openpyxl.load_workbook(wb_file)
+            grid_sheet_updated = wb_updated['01-12 2025']
+            
+            # FC, AC, SW should have correct totals
+            assert grid_sheet_updated['F4'].value == 70610.00, \
+                f"FC should be 70610.00, got {grid_sheet_updated['F4'].value}"
+            assert grid_sheet_updated['F5'].value == 422972.67, \
+                f"AC should be 422972.67, got {grid_sheet_updated['F5'].value}"
+            assert grid_sheet_updated['F6'].value == 249629.75, \
+                f"SW should be 249629.75, got {grid_sheet_updated['F6'].value}"
+            
+            wb_updated.close()
+            
+            # Now test with WRONG allocations: keyed by amount (the bug)
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            
+            grid_sheet = wb.create_sheet("01-12 2025")
+            grid_sheet['A1'] = 'Cost Centre'
+            grid_sheet['F1'] = 'May'
+            grid_sheet['A4'] = 'FC'
+            grid_sheet['A5'] = 'AC'
+            grid_sheet['A6'] = 'SW'
+            
+            wb_file2 = out_dir / 'Cost Sheet-2025-05-bad.xlsx'
+            wb.save(wb_file2)
+            wb.close()
+            
+            # Wrong allocations: centre is actually an AMOUNT (the bug)
+            # This should NOT work - the amounts won't match row labels
+            wrong_allocations = [
+                {'centre': '216328.807591692', 'amount': 70610.00, 'account': 'test1'},  # centre is a number!
+                {'centre': '14747', 'amount': 200000.00, 'account': 'test2'},
+                {'centre': '18767.05565', 'amount': 150000.00, 'account': 'test3'},
+            ]
+            
+            updater2 = WorkbookUpdater(tmpdir)
+            updater2.update_cost_sheet_workbook(
+                wb_file2,
+                allocations=wrong_allocations,
+                billing_month='2025-05',
+                parsed_bills=[],
+                meter_log={}
+            )
+            
+            # Verify that wrong allocations did NOT write anything
+            # (because numeric centres won't match "FC", "AC", "SW" row labels)
+            wb_wrong = openpyxl.load_workbook(wb_file2)
+            grid_wrong = wb_wrong['01-12 2025']
+            
+            # All cells should be None (nothing written)
+            assert grid_wrong['F4'].value is None, \
+                "FC row should be empty when centre is keyed by amount"
+            assert grid_wrong['F5'].value is None, \
+                "AC row should be empty when centre is keyed by amount"
+            assert grid_wrong['F6'].value is None, \
+                "SW row should be empty when centre is keyed by amount"
+            
+            wb_wrong.close()
 
 
 if __name__ == '__main__':
