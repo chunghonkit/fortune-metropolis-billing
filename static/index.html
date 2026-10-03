@@ -720,42 +720,19 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">CLP Bills</h2>
-                            <div class="card-subtitle" id="lastScanTime">No scan yet</div>
-                        </div>
-                        <div class="card-actions">
-                            <button class="btn-primary" onclick="scanFolder()">
-                                <span id="scanIcon">🔍</span>
-                                <span>Scan Folder</span>
-                            </button>
-                            <button class="btn-secondary" onclick="refreshFolder()">
-                                🔄
-                            </button>
+                            <h2 class="card-title">Upload Bills</h2>
+                            <div class="card-subtitle" id="lastScanTime">Select and upload PDF files</div>
                         </div>
                     </div>
                     
-                    <div class="tabs">
-                        <button class="tab active" onclick="switchTab('folder')">Folder Scan</button>
-                        <button class="tab" onclick="switchTab('upload')">Browser Upload</button>
+                    <div class="form-group">
+                        <label class="form-label">Select PDF files (up to 15)</label>
+                        <input type="file" id="billFiles" class="form-input" accept=".pdf" multiple />
                     </div>
-                    
-                    <div id="folderTab" class="tab-content active">
-                        <div class="info-box">
-                            <strong>Folder:</strong> <code id="folderPath">~/Metropolis/{YYYY-MM}/bills/</code>
-                        </div>
-                        <div id="folderStatus"></div>
-                    </div>
-                    
-                    <div id="uploadTab" class="tab-content">
-                        <div class="form-group">
-                            <label class="form-label">Select PDF files (up to 15)</label>
-                            <input type="file" id="billFiles" class="form-input" accept=".pdf" multiple />
-                        </div>
-                        <button class="btn-primary" onclick="uploadBills()">
-                            ⬆️ Upload & Parse
-                        </button>
-                        <div id="uploadStatus"></div>
-                    </div>
+                    <button class="btn-primary" onclick="uploadBills()">
+                        ⬆️ Upload & Parse Bills
+                    </button>
+                    <div id="uploadStatus"></div>
                 </div>
                 
                 <!-- Account Board -->
@@ -825,7 +802,6 @@
     
     <script>
         const API_BASE = '';
-        let currentTab = 'folder';
         
         // Expected accounts with roles
         const EXPECTED_ACCOUNTS = [
@@ -881,33 +857,6 @@
             `).join('');
         }
         
-        // Load config
-        async function loadConfig() {
-            try {
-                const response = await fetch(`${API_BASE}/api/config`);
-                const config = await response.json();
-                const month = document.getElementById('monthInput').value;
-                document.getElementById('folderPath').textContent = `${config.metropolis_root}/${month}/bills/`;
-            } catch (error) {
-                console.error('Error loading config:', error);
-            }
-        }
-        
-        // Tab switching
-        function switchTab(tab) {
-            currentTab = tab;
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            if (tab === 'folder') {
-                document.querySelectorAll('.tab')[0].classList.add('active');
-                document.getElementById('folderTab').classList.add('active');
-            } else {
-                document.querySelectorAll('.tab')[1].classList.add('active');
-                document.getElementById('uploadTab').classList.add('active');
-            }
-        }
-        
         // Set month
         async function setMonth() {
             const monthInput = document.getElementById('monthInput');
@@ -926,51 +875,11 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    const config = await (await fetch(`${API_BASE}/api/config`)).json();
-                    document.getElementById('folderPath').textContent = `${config.metropolis_root}/${monthInput.value}/bills/`;
+                    // Month set successfully
                 }
             } catch (error) {
                 console.error('Error setting month:', error);
             }
-        }
-        
-        // Scan folder
-        async function scanFolder() {
-            const status = document.getElementById('folderStatus');
-            const scanIcon = document.getElementById('scanIcon');
-            
-            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Scanning folder...</div>';
-            scanIcon.textContent = '⏳';
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/scan-folder`, {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    const now = new Date().toLocaleTimeString();
-                    document.getElementById('lastScanTime').textContent = `Last scan: ${now}`;
-                    status.innerHTML = `<div class="status-alert success">✓ Found ${result.pdfs_found} PDFs, parsed ${result.bills_parsed} bills</div>`;
-                    displayGate(result.gate_status);
-                    scanIcon.textContent = '✓';
-                    setTimeout(() => scanIcon.textContent = '🔍', 2000);
-                } else {
-                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
-                    scanIcon.textContent = '❌';
-                    setTimeout(() => scanIcon.textContent = '🔍', 2000);
-                }
-            } catch (error) {
-                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
-                scanIcon.textContent = '❌';
-                setTimeout(() => scanIcon.textContent = '🔍', 2000);
-            }
-        }
-        
-        // Refresh folder
-        function refreshFolder() {
-            scanFolder();
         }
         
         // Upload bills
