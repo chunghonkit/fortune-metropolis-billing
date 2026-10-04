@@ -718,7 +718,8 @@
             gap: 8px;
         }
         
-        .download-row a.btn-secondary {
+        .download-row a.btn-secondary,
+        .card-actions a.btn-secondary {
             text-decoration: none;
             display: inline-block;
             padding: 10px 16px;
@@ -1026,6 +1027,73 @@
                                     <th class="num">kWh share</th>
                                     <th class="num">Live %</th>
                                     <th class="num">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Bill and meter history</h2>
+                            <div class="card-subtitle">Saved in masters/electricity_history.xlsx and kept across months</div>
+                        </div>
+                        <div class="card-actions">
+                            <a id="dlHistory" class="btn-secondary disabled" href="#">Download history</a>
+                        </div>
+                    </div>
+                    <p class="results-note">
+                        Each processed month adds one row per electricity bill and one row per meter.
+                        The bill row is that account’s kWh and the charges printed on the bill.
+                        A meter row is that meter’s kWh. A meter charge is filled only when the bill
+                        prints one, which is the FiT line. The account total is not split across meters.
+                    </p>
+                    <div class="filter-row" style="margin-top: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">Bill</label>
+                            <select id="historyAccount" class="form-input" onchange="onHistoryAccount()">
+                                <option value="">All bills</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Meter</label>
+                            <select id="historyMeter" class="form-input" onchange="onHistoryMeter()">
+                                <option value="">All meters on the selected bill</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="historyStatus"></div>
+                    <div class="chart-grid" style="margin-top: 16px;">
+                        <div class="chart-frame">
+                            <h3>Bill kWh</h3>
+                            <div id="chartBillKwh"></div>
+                        </div>
+                        <div class="chart-frame">
+                            <h3>Bill charge</h3>
+                            <div id="chartBillCharge"></div>
+                        </div>
+                        <div class="chart-frame">
+                            <h3>Meter kWh</h3>
+                            <div id="chartMeterKwh"></div>
+                        </div>
+                        <div class="chart-frame">
+                            <h3>Meter charge printed on the bill</h3>
+                            <div id="chartMeterCharge"></div>
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto; margin-top: 16px;">
+                        <table class="data-table" id="historyMeterTable">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Account</th>
+                                    <th>Meter</th>
+                                    <th class="num">kWh</th>
+                                    <th class="num">Previous</th>
+                                    <th class="num">Present</th>
+                                    <th class="num">Printed charge</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -1362,6 +1430,7 @@
             } else {
                 clearResults();
             }
+            await loadHistory();
         }
 
         async function populateFilters() {
@@ -1550,6 +1619,106 @@
                 `;
             }).join('');
             return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${unit} chart">${bars}</svg>`;
+        }
+
+        function setHistoryDownload(ready) {
+            const link = document.getElementById('dlHistory');
+            if (!ready) {
+                link.classList.add('disabled');
+                link.removeAttribute('href');
+                return;
+            }
+            link.classList.remove('disabled');
+            link.href = `${API_BASE}/api/history/download`;
+        }
+
+        function fillHistoryMeters(choices, account) {
+            const select = document.getElementById('historyMeter');
+            const current = select.value;
+            const meters = (choices || []).filter((row) => !account || row.account === account);
+            select.innerHTML = [`<option value="">All meters on the selected bill</option>`]
+                .concat(meters.map((row) => `<option value="${row.meter_no}" data-account="${row.account}">${row.meter_no} · ${row.account}</option>`))
+                .join('');
+            if (meters.some((row) => row.meter_no === current)) {
+                select.value = current;
+            }
+        }
+
+        function onHistoryAccount() {
+            document.getElementById('historyMeter').value = '';
+            loadHistory();
+        }
+
+        function onHistoryMeter() {
+            const option = document.getElementById('historyMeter').selectedOptions[0];
+            const owner = option && option.dataset.account;
+            if (owner) document.getElementById('historyAccount').value = owner;
+            loadHistory();
+        }
+
+        async function loadHistory() {
+            const account = document.getElementById('historyAccount').value;
+            const meter = document.getElementById('historyMeter').value;
+            const params = new URLSearchParams();
+            if (account) params.set('account', account);
+            if (meter) params.set('meter', meter);
+            const status = document.getElementById('historyStatus');
+            try {
+                const response = await fetch(`${API_BASE}/api/history?${params.toString()}`);
+                const series = await response.json();
+                if (!response.ok) {
+                    status.innerHTML = `<div class="status-alert error">${series.detail || 'No history'}</div>`;
+                    setHistoryDownload(false);
+                    return;
+                }
+                const ready = (series.bills || []).length || (series.meters || []).length;
+                setHistoryDownload(ready);
+                if (!ready) {
+                    status.innerHTML = '<div class="status-alert info">Process a month to start the history file.</div>';
+                    document.getElementById('chartBillKwh').innerHTML = '';
+                    document.getElementById('chartBillCharge').innerHTML = '';
+                    document.getElementById('chartMeterKwh').innerHTML = '';
+                    document.getElementById('chartMeterCharge').innerHTML = '';
+                    document.querySelector('#historyMeterTable tbody').innerHTML = '';
+                    return;
+                }
+                status.innerHTML = '';
+                const accountSelect = document.getElementById('historyAccount');
+                accountSelect.innerHTML = ['<option value="">All bills</option>']
+                    .concat((series.accounts || []).map((item) => `<option value="${item}">${item}</option>`))
+                    .join('');
+                if (account) accountSelect.value = account;
+                fillHistoryMeters(series.meter_choices, account);
+                if (meter) document.getElementById('historyMeter').value = meter;
+                document.getElementById('chartBillKwh').innerHTML = barChart(series.months, series.bill_kwh, '#2563eb', 'kWh');
+                document.getElementById('chartBillCharge').innerHTML = barChart(series.months, series.bill_charge, '#0f766e', 'HKD');
+                document.getElementById('chartMeterKwh').innerHTML = barChart(series.months, series.meter_kwh, '#7c3aed', 'kWh');
+                const chargeLabels = [];
+                const chargeValues = [];
+                (series.months || []).forEach((month, index) => {
+                    const value = (series.meter_charge || [])[index];
+                    if (value !== null && value !== undefined) {
+                        chargeLabels.push(month);
+                        chargeValues.push(value);
+                    }
+                });
+                document.getElementById('chartMeterCharge').innerHTML = chargeLabels.length
+                    ? barChart(chargeLabels, chargeValues, '#b45309', 'HKD')
+                    : '<p class="results-note">No charge is printed for this meter. The account total stays on the bill.</p>';
+                document.querySelector('#historyMeterTable tbody').innerHTML = (series.meters || []).map((row) => `
+                    <tr>
+                        <td>${row.billing_month}</td>
+                        <td>${row.account}</td>
+                        <td>${row.meter_no}</td>
+                        <td class="num">${units(row.kwh)}</td>
+                        <td class="num">${row.previous == null ? '' : units(row.previous)}</td>
+                        <td class="num">${row.present == null ? '' : units(row.present)}</td>
+                        <td class="num">${row.charge == null ? '—' : money(row.charge)}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+            }
         }
     </script>
 </body>

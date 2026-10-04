@@ -115,6 +115,8 @@ def save_month_report(
     report = build_month_report(billing_month, parsed_bills, allocation_result, files)
     path = out_dir / DASHBOARD_FILE
     path.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    from app.consumption_history import upsert_history
+    upsert_history(metropolis_root, billing_month, parsed_bills)
     return path
 
 

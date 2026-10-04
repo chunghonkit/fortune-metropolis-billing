@@ -743,6 +743,35 @@ async def dashboard_charts(
     )
 
 
+@app.get("/api/history")
+async def electricity_history(
+    account: Optional[str] = None,
+    meter: Optional[str] = None,
+):
+    """Bill and meter trends from masters/electricity_history.xlsx."""
+    from app.consumption_history import history_choices, history_series, load_history
+    records = load_history(get_metropolis_root())
+    series = history_series(records, account=account or None, meter=meter or None)
+    choices = history_choices(records)
+    series['accounts'] = choices['accounts']
+    series['meter_choices'] = choices['meters']
+    return series
+
+
+@app.get("/api/history/download")
+async def download_electricity_history():
+    """Download the history workbook. It is not a month's out/ file."""
+    from app.consumption_history import HISTORY_NAME, history_path
+    path = history_path(get_metropolis_root())
+    if not path.is_file():
+        raise HTTPException(404, "No electricity history yet. Process a month first.")
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=HISTORY_NAME,
+    )
+
+
 @app.get("/api/download/{month}/{kind}")
 async def download_output_workbook(month: str, kind: str):
     """
