@@ -204,6 +204,11 @@
             gap: 20px;
             max-width: 1400px;
         }
+
+        /* Author display:grid would otherwise beat the hidden attribute. */
+        .dashboard-grid[hidden] {
+            display: none;
+        }
         
         /* KPI Row */
         .kpi-row {
@@ -626,6 +631,107 @@
             50% { opacity: 0.5; }
         }
         
+        .results-note {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: end;
+        }
+        
+        .filter-row .form-group {
+            min-width: 180px;
+            flex: 1;
+        }
+        
+        .month-checks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+        }
+        
+        .month-checks label {
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        .data-table th,
+        .data-table td {
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .data-table th {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .data-table td.num,
+        .data-table th.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        
+        .chart-frame {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+            overflow-x: auto;
+        }
+        
+        .chart-frame h3 {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .chart-frame svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .download-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .download-row a.btn-secondary {
+            text-decoration: none;
+            display: inline-block;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .download-row a.disabled {
+            pointer-events: none;
+            opacity: 0.45;
+        }
+        
         /* Responsive */
         @media (max-width: 1024px) {
             .account-board {
@@ -669,17 +775,13 @@
             
             <nav class="nav-items">
                 <div class="section-label">Navigation</div>
-                <div class="nav-item active">
+                <div class="nav-item active" data-view="intake" onclick="showView('intake')">
                     <span class="nav-icon">📄</span>
                     <span>Intake</span>
                 </div>
-                <div class="nav-item locked">
+                <div class="nav-item" data-view="results" onclick="openResults()">
                     <span class="nav-icon">📊</span>
-                    <span>Master</span>
-                </div>
-                <div class="nav-item locked">
-                    <span class="nav-icon">💰</span>
-                    <span>Allocate</span>
+                    <span>Consumption</span>
                 </div>
             </nav>
             
@@ -691,7 +793,7 @@
         
         <!-- Main Canvas -->
         <main class="main-canvas">
-            <div class="dashboard-grid">
+            <div class="dashboard-grid" id="intakeView">
                 <!-- KPI Row -->
                 <div class="kpi-row">
                     <div class="kpi-card">
@@ -797,6 +899,140 @@
                     </div>
                 </div>
             </div>
+
+            <div class="dashboard-grid" id="resultsView" hidden>
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Consumption</div>
+                        <div class="kpi-value" id="kpiKwh">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Allocated cost</div>
+                        <div class="kpi-value" id="kpiCost">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Accounts</div>
+                        <div class="kpi-value" id="kpiAccounts">—</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Cost centres</div>
+                        <div class="kpi-value" id="kpiCentres">—</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Electricity and cost allocation</h2>
+                            <div class="card-subtitle">Figures saved when each month was processed</div>
+                        </div>
+                    </div>
+                    <p class="results-note">
+                        kWh is the parsed bill consumption. A centre’s dollars are that account’s
+                        allocation base times the live percent from that month’s master.
+                        FiT accounts use net due plus the absolute FiT. Elect Charge ledger
+                        amounts are bookkeeping and are not these centre dollars.
+                    </p>
+                    <div class="filter-row" style="margin-top: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">Detail month</label>
+                            <select id="detailMonth" class="form-input" onchange="loadDetail()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Account</label>
+                            <select id="filterAccount" class="form-input" onchange="loadCharts()">
+                                <option value="">All accounts</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Cost centre</label>
+                            <select id="filterCentre" class="form-input" onchange="loadCharts()">
+                                <option value="">All centres</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 12px;">
+                        <label class="form-label">Months in the charts</label>
+                        <div class="month-checks" id="monthChecks"></div>
+                    </div>
+                    <div class="download-row" style="margin-top: 12px;">
+                        <a id="dlAllocation" class="btn-secondary disabled" href="#">Download Cost Allocation</a>
+                        <a id="dlSheet" class="btn-secondary disabled" href="#">Download Cost Sheet</a>
+                    </div>
+                    <div id="resultsStatus"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Charts</h2>
+                            <div class="card-subtitle" id="chartCaption">Select a processed month</div>
+                        </div>
+                    </div>
+                    <div class="chart-grid">
+                        <div class="chart-frame">
+                            <h3>Consumption (kWh)</h3>
+                            <div id="chartKwh"></div>
+                        </div>
+                        <div class="chart-frame">
+                            <h3>Allocated cost</h3>
+                            <div id="chartCost"></div>
+                        </div>
+                        <div class="chart-frame">
+                            <h3>Cost by centre</h3>
+                            <div id="chartCentres"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Consumption by account</h2>
+                            <div class="card-subtitle" id="consumptionCaption">Parsed bill kWh for the detail month</div>
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" id="consumptionTable">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Account</th>
+                                    <th class="num">kWh</th>
+                                    <th class="num">Bill total</th>
+                                    <th class="num">FiT</th>
+                                    <th class="num">Allocation base</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2 class="card-title">Cost allocation</h2>
+                            <div class="card-subtitle">Live percent applied to the allocation base</div>
+                        </div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table" id="allocationTable">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Account</th>
+                                    <th>Centre</th>
+                                    <th class="num">kWh share</th>
+                                    <th class="num">Live %</th>
+                                    <th class="num">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
     
@@ -842,7 +1078,21 @@
             document.getElementById('monthInput').value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
             
             initAccountBoard();
+            refreshMonths();
         });
+
+        function showView(name) {
+            document.getElementById('intakeView').hidden = name !== 'intake';
+            document.getElementById('resultsView').hidden = name !== 'results';
+            document.querySelectorAll('.nav-item[data-view]').forEach((item) => {
+                item.classList.toggle('active', item.dataset.view === name);
+            });
+        }
+
+        function openResults() {
+            showView('results');
+            refreshMonths(document.getElementById('detailMonth').value);
+        }
         
         // Initialize account board
         function initAccountBoard() {
@@ -1036,9 +1286,12 @@
                 const result = await response.json();
                 
                 if (response.ok && result.success) {
-                    // Success - show updated file paths
                     button.textContent = '✓ Month-End Complete';
                     summary.textContent = result.message;
+                    showView('results');
+                    if (result.billing_month) {
+                        await refreshMonths(result.billing_month);
+                    }
                     
                     // Display updated file paths
                     const filesList = Object.entries(result.updated_files)
@@ -1066,6 +1319,237 @@
                 summary.textContent = 'Error processing month-end.';
                 errors.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
             }
+        }
+
+        let processedMonths = [];
+
+        function money(value) {
+            const number = Number(value) || 0;
+            return number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function units(value) {
+            const number = Number(value) || 0;
+            return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        }
+
+        async function refreshMonths(prefer) {
+            try {
+                const response = await fetch(`${API_BASE}/api/months`);
+                const payload = await response.json();
+                processedMonths = payload.months || [];
+            } catch (error) {
+                processedMonths = [];
+            }
+            const select = document.getElementById('detailMonth');
+            const previous = prefer || select.value;
+            select.innerHTML = processedMonths.map((item) =>
+                `<option value="${item.month}">${item.month}</option>`
+            ).join('');
+            if (previous && processedMonths.some((item) => item.month === previous)) {
+                select.value = previous;
+            }
+            const checks = document.getElementById('monthChecks');
+            checks.innerHTML = processedMonths.map((item) => `
+                <label>
+                    <input type="checkbox" value="${item.month}" checked onchange="loadCharts()" />
+                    ${item.month}
+                </label>
+            `).join('') || '<span class="results-note">No processed month yet. Run month-end from Intake.</span>';
+            if (processedMonths.length) {
+                await populateFilters();
+                await loadDetail();
+            } else {
+                clearResults();
+            }
+        }
+
+        async function populateFilters() {
+            const response = await fetch(`${API_BASE}/api/charts`);
+            if (!response.ok) return;
+            const series = await response.json();
+            fillSelect(
+                'filterAccount',
+                (series.by_account || []).map((row) => row.name).filter(Boolean),
+                'All accounts'
+            );
+            fillSelect(
+                'filterCentre',
+                (series.by_centre || []).map((row) => row.name).filter(Boolean),
+                'All centres'
+            );
+        }
+
+        function clearResults() {
+            document.getElementById('kpiKwh').textContent = '—';
+            document.getElementById('kpiCost').textContent = '—';
+            document.getElementById('kpiAccounts').textContent = '—';
+            document.getElementById('kpiCentres').textContent = '—';
+            document.querySelector('#consumptionTable tbody').innerHTML = '';
+            document.querySelector('#allocationTable tbody').innerHTML = '';
+            document.getElementById('consumptionCaption').textContent = 'Parsed bill kWh for the months selected above';
+            document.getElementById('chartKwh').innerHTML = '';
+            document.getElementById('chartCost').innerHTML = '';
+            document.getElementById('chartCentres').innerHTML = '';
+            setDownload('dlAllocation', null);
+            setDownload('dlSheet', null);
+        }
+
+        function setDownload(id, month, kind, ready) {
+            const link = document.getElementById(id);
+            if (!month || !ready) {
+                link.classList.add('disabled');
+                link.removeAttribute('href');
+                return;
+            }
+            link.classList.remove('disabled');
+            link.href = `${API_BASE}/api/download/${month}/${kind}`;
+        }
+
+        function fillSelect(id, values, allLabel) {
+            const select = document.getElementById(id);
+            const current = select.value;
+            const options = [`<option value="">${allLabel}</option>`]
+                .concat(values.map((value) => `<option value="${value}">${value}</option>`));
+            select.innerHTML = options.join('');
+            if (values.includes(current)) {
+                select.value = current;
+            }
+        }
+
+        async function loadDetail() {
+            const month = document.getElementById('detailMonth').value;
+            const status = document.getElementById('resultsStatus');
+            if (!month) {
+                clearResults();
+                return;
+            }
+            const meta = processedMonths.find((item) => item.month === month) || {};
+            setDownload('dlAllocation', month, 'cost-allocation', meta.cost_allocation);
+            setDownload('dlSheet', month, 'cost-sheet', meta.cost_sheet);
+            try {
+                const response = await fetch(`${API_BASE}/api/dashboard/${month}`);
+                if (!response.ok) {
+                    const error = await response.json();
+                    status.innerHTML = `<div class="status-alert error">${error.detail || 'No report for this month'}</div>`;
+                    return;
+                }
+                const report = await response.json();
+                status.innerHTML = '';
+                await loadCharts();
+            } catch (error) {
+                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderTables(series) {
+            const centre = document.getElementById('filterCentre').value;
+            const accountsInFilter = new Set((series.rows || []).map((row) => `${row.month}|${row.account}`));
+            const bills = (series.bill_rows || []).filter((row) => !centre || accountsInFilter.has(`${row.month}|${row.account}`));
+            document.querySelector('#consumptionTable tbody').innerHTML = bills.map((row) => `
+                <tr>
+                    <td>${row.month}</td>
+                    <td>${row.account}</td>
+                    <td class="num">${units(row.kwh)}</td>
+                    <td class="num">${money(row.total_amount)}</td>
+                    <td class="num">${money(row.fit_amount)}</td>
+                    <td class="num">${money(row.allocation_base)}</td>
+                </tr>
+            `).join('');
+            document.querySelector('#allocationTable tbody').innerHTML = (series.rows || []).map((row) => `
+                <tr>
+                    <td>${row.month}</td>
+                    <td>${row.account}</td>
+                    <td>${row.centre}</td>
+                    <td class="num">${units(row.attributed_kwh)}</td>
+                    <td class="num">${(Number(row.percentage) * 100).toFixed(4)}%</td>
+                    <td class="num">${money(row.amount)}</td>
+                </tr>
+            `).join('');
+            document.getElementById('consumptionCaption').textContent = centre
+                ? 'Parsed bills for accounts that have the selected centre. Chart kWh is the live-percent share.'
+                : 'Parsed bill kWh for the months selected above';
+        }
+
+        function selectedChartMonths() {
+            return [...document.querySelectorAll('#monthChecks input:checked')].map((box) => box.value);
+        }
+
+        async function loadCharts() {
+            const months = selectedChartMonths();
+            const account = document.getElementById('filterAccount').value;
+            const centre = document.getElementById('filterCentre').value;
+            if (!months.length) {
+                document.getElementById('kpiKwh').textContent = units(0);
+                document.getElementById('kpiCost').textContent = money(0);
+                document.getElementById('chartKwh').innerHTML = '<p class="results-note">Select at least one month.</p>';
+                document.getElementById('chartCost').innerHTML = '';
+                document.getElementById('chartCentres').innerHTML = '';
+                document.getElementById('chartCaption').textContent = 'No months selected';
+                return;
+            }
+            const params = new URLSearchParams();
+            if (months.length) params.set('months', months.join(','));
+            if (account) params.set('account', account);
+            if (centre) params.set('centre', centre);
+            const response = await fetch(`${API_BASE}/api/charts?${params.toString()}`);
+            const series = await response.json();
+            if (!response.ok) {
+                document.getElementById('chartCaption').textContent = series.detail || 'Chart request failed';
+                return;
+            }
+            const kwhTotal = (series.kwh || []).reduce((sum, value) => sum + Number(value), 0);
+            const costTotal = (series.cost || []).reduce((sum, value) => sum + Number(value), 0);
+            document.getElementById('kpiKwh').textContent = units(kwhTotal);
+            document.getElementById('kpiCost').textContent = money(costTotal);
+            document.getElementById('kpiAccounts').textContent = (series.by_account || []).length;
+            document.getElementById('kpiCentres').textContent = (series.by_centre || []).length;
+            const filterBits = [
+                months.length ? months.join(', ') : 'no months',
+                account || 'all accounts',
+                centre || 'all centres',
+            ];
+            document.getElementById('chartCaption').textContent = filterBits.join(' · ');
+            document.getElementById('chartKwh').innerHTML = barChart(series.months, series.kwh, '#2563eb', 'kWh');
+            document.getElementById('chartCost').innerHTML = barChart(series.months, series.cost, '#0f766e', 'HKD');
+            document.getElementById('chartCentres').innerHTML = barChart(
+                (series.by_centre || []).map((row) => row.name),
+                (series.by_centre || []).map((row) => row.cost),
+                '#b45309',
+                'HKD'
+            );
+            renderTables(series);
+        }
+
+        function barChart(labels, values, color, unit) {
+            labels = labels || [];
+            values = (values || []).map((value) => Number(value) || 0);
+            if (!labels.length) {
+                return '<p class="results-note">Nothing to chart for this filter.</p>';
+            }
+            const width = Math.max(320, labels.length * 72);
+            const height = 200;
+            const padLeft = 8;
+            const padBottom = 36;
+            const padTop = 16;
+            const max = Math.max(...values, 0);
+            const scale = max > 0 ? (height - padTop - padBottom) / max : 0;
+            const gap = 12;
+            const barWidth = Math.max(18, (width - padLeft * 2) / labels.length - gap);
+            const bars = labels.map((label, index) => {
+                const barHeight = values[index] * scale;
+                const x = padLeft + index * (barWidth + gap);
+                const y = height - padBottom - barHeight;
+                const shown = unit === 'HKD' ? money(values[index]) : units(values[index]);
+                return `
+                    <g>
+                        <rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barHeight, 0)}" rx="4" fill="${color}"></rect>
+                        <text x="${x + barWidth / 2}" y="${height - 16}" text-anchor="middle" font-size="11" fill="currentColor">${label}</text>
+                        <title>${label}: ${shown}</title>
+                    </g>
+                `;
+            }).join('');
+            return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${unit} chart">${bars}</svg>`;
         }
     </script>
 </body>

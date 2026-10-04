@@ -1162,5 +1162,14 @@ def process_month_end(
             check_meter_sw=allocation_result.get('check_meter_sw'),
             master_path=master_path,
         )
-    
+
+    from app.dashboard_data import save_month_report
+    save_month_report(
+        metropolis_root,
+        current_month,
+        parsed_bills,
+        allocation_result,
+        updated_files,
+    )
+
     return updated_files

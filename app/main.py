@@ -678,12 +678,16 @@ async def process_month_end():
             meter_log,
             master_path,
         )
+
+        from app.dashboard_data import load_month_report
+        report = load_month_report(metropolis_root, billing_month)
         
         return {
             "success": True,
             "billing_month": billing_month,
             "previous_month": previous_month,
             "updated_files": {k: str(v) for k, v in updated_files.items()},
+            "report": report,
             "message": f"Month-end processed: copied from {previous_month}, updated for {billing_month}"
         }
         
@@ -692,6 +696,75 @@ async def process_month_end():
     except Exception as e:
         logger.error(f"Error processing month-end: {e}", exc_info=True)
         raise HTTPException(500, f"Error processing month-end: {str(e)}")
+
+
+@app.get("/api/months")
+async def processed_months():
+    """Months that have a dashboard report or output workbooks on disk."""
+    from app.dashboard_data import list_processed_months
+    return {"months": list_processed_months(get_metropolis_root())}
+
+
+@app.get("/api/dashboard/{month}")
+async def dashboard_month(month: str):
+    """Consumption and cost allocation saved when that month was processed."""
+    from app.dashboard_data import load_month_report, valid_month
+    if not valid_month(month):
+        raise HTTPException(400, "Month must be YYYY-MM")
+    report = load_month_report(get_metropolis_root(), month)
+    if report is None:
+        raise HTTPException(404, f"No dashboard report for {month}. Process that month first.")
+    return report
+
+
+@app.get("/api/charts")
+async def dashboard_charts(
+    months: Optional[str] = None,
+    account: Optional[str] = None,
+    centre: Optional[str] = None,
+):
+    """
+    Chart series from saved bill kWh and allocation lines.
+
+    months is a comma-separated YYYY-MM list. Omit it for every processed month.
+    """
+    from app.dashboard_data import chart_series, load_all_reports, valid_month
+    selected = None
+    if months:
+        selected = [part.strip() for part in months.split(',') if part.strip()]
+        bad = [part for part in selected if not valid_month(part)]
+        if bad:
+            raise HTTPException(400, f"Month must be YYYY-MM: {', '.join(bad)}")
+    return chart_series(
+        load_all_reports(get_metropolis_root()),
+        months=selected,
+        account=account or None,
+        centre=centre or None,
+    )
+
+
+@app.get("/api/download/{month}/{kind}")
+async def download_output_workbook(month: str, kind: str):
+    """
+    Download a month-end workbook from METROPOLIS_ROOT/{YYYY-MM}/out/.
+
+    kind is cost-allocation or cost-sheet. The meter-log route is unchanged.
+    """
+    from app.dashboard_data import find_output_workbook, valid_month
+    if not valid_month(month):
+        raise HTTPException(400, "Month must be YYYY-MM")
+    if kind not in ("cost-allocation", "cost-sheet"):
+        raise HTTPException(400, "kind must be cost-allocation or cost-sheet")
+    try:
+        path = find_output_workbook(get_metropolis_root(), month, kind)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if path is None:
+        raise HTTPException(404, f"No {kind} workbook for {month}")
+    media = "application/vnd.ms-excel"
+    if path.suffix.lower() == ".xlsx":
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return FileResponse(path, media_type=media, filename=path.name)
 
 
 @app.post("/api/reset")
