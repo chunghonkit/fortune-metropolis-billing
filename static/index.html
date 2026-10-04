@@ -745,10 +745,31 @@
         }
         
         @media (max-width: 768px) {
-            .sidebar {
-                width: 200px;
+            body {
+                height: auto;
+                overflow: auto;
             }
-            
+
+            .app-shell {
+                flex-direction: column;
+                height: auto;
+                min-height: 100vh;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+            }
+
+            .main-canvas {
+                overflow: visible;
+                width: 100%;
+            }
+
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+
             .kpi-row {
                 grid-template-columns: repeat(2, 1fr);
             }
