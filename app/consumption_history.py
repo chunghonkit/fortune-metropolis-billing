@@ -5,8 +5,10 @@ One workbook under METROPOLIS_ROOT/masters stores every processed month.
 Reprocessing a month replaces that month's rows and leaves the others.
 
 Bill rows are the parsed account kWh and the charges printed on the bill.
-Meter rows are each meter's kWh. A meter charge is stored only when the
-bill prints one (a FiT line). The account total is not spread across meters.
+Meter rows are each meter's kWh. charge is stored only when the bill prints
+one (a FiT line). proportional_charge is a calculated kWh share of the
+account charge. It is not a printed meter amount, and it is not a Cost
+Sheet centre dollar.
 """
 
 from pathlib import Path
@@ -42,7 +44,11 @@ METER_COLUMNS = (
     'adjustment',
     'charge',
     'charge_source',
+    'proportional_charge',
 )
+
+# These two bills use net due plus absolute FiT as the share base.
+FIT_ACCOUNTS = frozenset({'52167-13569-2', '00776-78552-1'})
 
 
 def history_path(metropolis_root: Path) -> Path:
@@ -82,6 +88,22 @@ def bill_rows_for_month(billing_month: str, parsed_bills: Iterable[Dict]) -> Lis
     return rows
 
 
+def proportional_meter_charge(account: str, account_kwh, meter_kwh, total_amount, fit_amount):
+    """
+    Account charge times this meter's share of the account kWh.
+
+    A normal account uses the bill total. The two FiT accounts use net due
+    plus absolute FiT. Zero account kWh leaves the share blank.
+    """
+    kwh = float(account_kwh or 0)
+    if kwh == 0:
+        return None
+    base = float(total_amount or 0)
+    if account in FIT_ACCOUNTS:
+        base += abs(float(fit_amount or 0))
+    return base * (float(meter_kwh or 0) / kwh)
+
+
 def meter_rows_for_month(billing_month: str, parsed_bills: Iterable[Dict]) -> List[Dict]:
     rows = []
     for bill in parsed_bills or []:
@@ -89,11 +111,13 @@ def meter_rows_for_month(billing_month: str, parsed_bills: Iterable[Dict]) -> Li
         if not account:
             continue
         printed = _printed_meter_charges(bill)
+        account_kwh = float(bill.get('kwh') or 0)
         for meter in bill.get('meters') or []:
             number = str(meter.get('meter_no') or '').strip()
             if not number:
                 continue
             charge = printed.get(number)
+            meter_kwh = float(meter.get('consumption') if meter.get('consumption') is not None else meter.get('kwh') or 0)
             rows.append({
                 'billing_month': billing_month,
                 'account': account,
@@ -101,11 +125,18 @@ def meter_rows_for_month(billing_month: str, parsed_bills: Iterable[Dict]) -> Li
                 'previous': meter.get('previous'),
                 'present': meter.get('present'),
                 'factor': meter.get('factor'),
-                'kwh': float(meter.get('consumption') if meter.get('consumption') is not None else meter.get('kwh') or 0),
+                'kwh': meter_kwh,
                 'primary': meter.get('primary'),
                 'adjustment': meter.get('adjustment'),
                 'charge': charge,
                 'charge_source': 'fit_line' if charge is not None else '',
+                'proportional_charge': proportional_meter_charge(
+                    account,
+                    account_kwh,
+                    meter_kwh,
+                    bill.get('total_amount'),
+                    bill.get('fit_amount'),
+                ),
             })
     rows.sort(key=lambda row: (row['account'], row['meter_no']))
     return rows
@@ -162,7 +193,9 @@ def _save(path: Path, bills: List[Dict], meters: List[Dict]) -> None:
         'Bills are one row per account per month: parsed kWh and the charges printed on that bill. '
         'Meters are one row per meter: kWh from the register. '
         'charge is filled only when the bill prints an amount for that meter (a FiT line). '
-        'The account total is not divided across meters.'
+        'proportional_charge is calculated: account charge times (meter kWh / account kWh). '
+        'It is not a charge the bill printed. FiT accounts 52167-13569-2 and 00776-78552-1 '
+        'use net due plus absolute FiT as that account charge. Zero account kWh leaves it blank.'
     )
     note.column_dimensions['A'].width = 120
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -312,10 +345,10 @@ def item_chart_series(
     """
     kWh and cost for one clicked item, across the months saved for it.
 
-    Bill and meter numbers are read from the history workbook. A meter cost
-    is null when that month has no printed charge. A cost centre's kWh is
-    each account's history kWh times that month's saved live percent. The
-    centre cost is the saved allocation amount, not a meter charge.
+    Bill cost is the stored bill total. A meter's second series is
+    proportional_charge from the history workbook, not the printed charge.
+    A cost centre's kWh is each account's history kWh times that month's
+    saved live percent. The centre cost is the saved allocation amount.
     """
     if kind == 'bill':
         rows = [row for row in records.get('bills') or [] if row.get('account') == item_id]
@@ -350,12 +383,16 @@ def item_chart_series(
         for month in months:
             month_rows = _rows_for_month(rows, month)
             kwh.append(sum(float(row.get('kwh') or 0) for row in month_rows))
-            printed = [float(row['charge']) for row in month_rows if row.get('charge') is not None]
-            cost.append(sum(printed) if printed else None)
+            shares = [
+                float(row['proportional_charge'])
+                for row in month_rows
+                if row.get('proportional_charge') is not None
+            ]
+            cost.append(sum(shares) if shares else None)
         note = None
         if all(value is None for value in cost):
-            note = 'No charge is printed for this meter. The account total stays on the bill.'
-        return _chart(kind, item_id, label, months, kwh, cost, note)
+            note = 'Account kWh is zero, so the proportional charge is blank.'
+        return _chart(kind, item_id, label, months, kwh, cost, note, 'Proportional charge')
 
     if kind == 'centre':
         selected = []
@@ -387,7 +424,7 @@ def item_chart_series(
     raise ValueError('kind must be bill, meter, or centre')
 
 
-def _chart(kind, item_id, label, months, kwh, cost, note) -> Dict:
+def _chart(kind, item_id, label, months, kwh, cost, note, cost_label='Cost') -> Dict:
     return {
         'kind': kind,
         'id': item_id,
@@ -395,6 +432,7 @@ def _chart(kind, item_id, label, months, kwh, cost, note) -> Dict:
         'months': months,
         'kwh': kwh,
         'cost': cost,
+        'cost_label': cost_label,
         'source': 'electricity_history',
         'note': note,
     }

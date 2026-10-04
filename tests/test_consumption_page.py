@@ -134,14 +134,13 @@ def test_buttons_switch_and_chart_reads_history_file(tmp_path, monkeypatch):
 
     meter = _run(history_item_chart('meter', f'{retail}|{chiller}'))
     assert meter['source'] == 'electricity_history'
+    assert meter['cost_label'] == 'Proportional charge'
     assert meter['kwh'] == [250, 300]
-    assert meter['cost'] == [None, None]
-    assert meter['cost'] != [400, 500]
-    assert meter['note']
+    assert meter['cost'] == pytest.approx([400 * (250 / 1000), 500 * (300 / 1500)])
 
     fit = _run(history_item_chart('meter', f'{fit_account}|{fit_meter}'))
     assert fit['kwh'] == [80]
-    assert fit['cost'] == [-10]
+    assert fit['cost'] == pytest.approx([(30 + 10) * (80 / 80)])
 
     centre = _run(history_item_chart('centre', 'AC'))
     assert centre['months'] == ['2025-05', '2025-06']

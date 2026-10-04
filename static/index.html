@@ -954,7 +954,7 @@
                         Choose electricity bills, meters, or cost centres. Only that set of buttons is shown.
                         Nothing is charted until a button is clicked.
                         A cost centre’s kWh is each bill’s saved kWh times that month’s live percent.
-                        Its cost is the allocation amount. A meter cost is shown only when the bill prints one.
+                        Its cost is the allocation amount. A meter’s second series is a calculated share of the account charge, not an amount the bill printed.
                     </p>
                     <div class="mode-switch" role="group" aria-label="Which buttons to show">
                         <button type="button" class="btn-secondary active" data-kind="bill" onclick="setItemKind('bill')">Electricity bills</button>
@@ -971,7 +971,7 @@
                                 <div id="chartKwh"></div>
                             </div>
                             <div class="chart-frame">
-                                <h3>Cost</h3>
+                                <h3 id="chartCostTitle">Cost</h3>
                                 <div id="chartCost"></div>
                             </div>
                         </div>
@@ -1343,6 +1343,7 @@
             document.getElementById('chartKwh').innerHTML = '';
             document.getElementById('chartCost').innerHTML = '';
             document.getElementById('itemChartTitle').textContent = '';
+            document.getElementById('chartCostTitle').textContent = 'Cost';
         }
 
         function setItemKind(kind) {
@@ -1401,6 +1402,7 @@
             document.getElementById('chartPlaceholder').hidden = true;
             document.getElementById('itemChart').hidden = false;
             document.getElementById('itemChartTitle').textContent = series.label || itemId;
+            document.getElementById('chartCostTitle').textContent = series.cost_label || 'Cost';
             document.getElementById('chartKwh').innerHTML = barChart(series.months, series.kwh, '#2563eb', 'kWh');
             const costs = series.cost || [];
             const printed = costs.some((value) => value !== null && value !== undefined);

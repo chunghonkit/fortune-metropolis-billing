@@ -116,6 +116,78 @@ def test_history_keeps_months_and_does_not_invent_meter_charges(tmp_path):
     assert all(str(row['meter_no']) == chiller for row in meter_trend['meters'])
 
 
+def test_proportional_charge_is_separate_from_the_printed_charge(tmp_path):
+    retail = '55861-52267-1'
+    fit_retail = '52167-13569-2'
+    fit_other = '00776-78552-1'
+    quiet = '97968-02236-6'
+    chiller = '9024222'
+    other = '9048406'
+    fit_meter = '9115936'
+    other_fit_meter = '9144816'
+    silent = '9076788'
+
+    upsert_history(tmp_path, '2025-05', [
+        _bill(retail, 1000, 400, [
+            _meter(chiller, 250),
+            _meter(other, 750),
+        ]),
+        _bill(fit_retail, 200, 100, [
+            _meter(fit_meter, 50),
+        ], fit_amount=-40, fit_lines=[{'meter': fit_meter, 'amount': 40}]),
+        _bill(fit_other, 80, 30, [
+            _meter(other_fit_meter, 20),
+        ], fit_amount=-10),
+        _bill(quiet, 0, 27503, [
+            _meter(silent, 12),
+        ]),
+    ])
+
+    stored = load_history(tmp_path)
+    meters = stored['meters']
+
+    def row(account, meter_no):
+        return next(item for item in meters if item['account'] == account and str(item['meter_no']) == meter_no)
+
+    chiller_row = row(retail, chiller)
+    other_row = row(retail, other)
+    assert chiller_row['charge'] is None
+    assert chiller_row['charge_source'] in (None, '')
+    assert chiller_row['proportional_charge'] == pytest.approx(400 * (250 / 1000))
+    assert other_row['proportional_charge'] == pytest.approx(400 * (750 / 1000))
+    assert chiller_row['proportional_charge'] != 400
+
+    fit_row = row(fit_retail, fit_meter)
+    assert fit_row['charge'] == -40
+    assert fit_row['charge_source'] == 'fit_line'
+    assert fit_row['proportional_charge'] == pytest.approx((100 + 40) * (50 / 200))
+    assert fit_row['proportional_charge'] != pytest.approx(100 * (50 / 200))
+
+    other_fit = row(fit_other, other_fit_meter)
+    assert other_fit['charge'] is None
+    assert other_fit['proportional_charge'] == pytest.approx((30 + 10) * (20 / 80))
+
+    silent_row = row(quiet, silent)
+    assert silent_row['charge'] is None
+    assert silent_row['proportional_charge'] is None
+
+    book = load_workbook(history_path(tmp_path))
+    header = [cell.value for cell in book['Meters'][1]]
+    assert header[header.index('charge')] == 'charge'
+    assert 'proportional_charge' in header
+    charge_at = header.index('charge')
+    share_at = header.index('proportional_charge')
+    written = {
+        (values[1], str(values[2])): values
+        for values in book['Meters'].iter_rows(min_row=2, values_only=True)
+    }
+    assert written[(quiet, silent)][charge_at] is None
+    assert written[(quiet, silent)][share_at] is None
+    assert written[(retail, chiller)][charge_at] is None
+    assert written[(retail, chiller)][share_at] == pytest.approx(100)
+    book.close()
+
+
 def test_history_download_serves_the_master(tmp_path, monkeypatch):
     monkeypatch.setenv('METROPOLIS_ROOT', str(tmp_path))
     upsert_history(tmp_path, '2025-05', [
