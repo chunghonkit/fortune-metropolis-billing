@@ -662,30 +662,6 @@
             gap: 6px;
         }
         
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        
-        .data-table th,
-        .data-table td {
-            text-align: left;
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .data-table th {
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-        
-        .data-table td.num,
-        .data-table th.num {
-            text-align: right;
-            font-variant-numeric: tabular-nums;
-        }
-        
         .chart-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -731,6 +707,30 @@
         .download-row a.disabled {
             pointer-events: none;
             opacity: 0.45;
+        }
+
+        .mode-switch {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .mode-switch button.active,
+        .item-buttons button.active {
+            background: var(--color-primary);
+            color: white;
+            border-color: var(--color-primary);
+        }
+
+        .item-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .item-chart[hidden] {
+            display: none;
         }
         
         /* Responsive */
@@ -902,63 +902,21 @@
             </div>
 
             <div class="dashboard-grid" id="resultsView" hidden>
-                <div class="kpi-row">
-                    <div class="kpi-card">
-                        <div class="kpi-label">Consumption</div>
-                        <div class="kpi-value" id="kpiKwh">—</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Allocated cost</div>
-                        <div class="kpi-value" id="kpiCost">—</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Accounts</div>
-                        <div class="kpi-value" id="kpiAccounts">—</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Cost centres</div>
-                        <div class="kpi-value" id="kpiCentres">—</div>
-                    </div>
-                </div>
-
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">Electricity and cost allocation</h2>
-                            <div class="card-subtitle">Figures saved when each month was processed</div>
+                            <h2 class="card-title">Downloads</h2>
+                            <div class="card-subtitle">Workbooks written for the selected month, and the history file</div>
                         </div>
                     </div>
-                    <p class="results-note">
-                        kWh is the parsed bill consumption. A centre’s dollars are that account’s
-                        allocation base times the live percent from that month’s master.
-                        FiT accounts use net due plus the absolute FiT. Elect Charge ledger
-                        amounts are bookkeeping and are not these centre dollars.
-                    </p>
-                    <div class="filter-row" style="margin-top: 16px;">
-                        <div class="form-group">
-                            <label class="form-label">Detail month</label>
-                            <select id="detailMonth" class="form-input" onchange="loadDetail()"></select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Account</label>
-                            <select id="filterAccount" class="form-input" onchange="loadCharts()">
-                                <option value="">All accounts</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Cost centre</label>
-                            <select id="filterCentre" class="form-input" onchange="loadCharts()">
-                                <option value="">All centres</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group" style="margin-top: 12px;">
-                        <label class="form-label">Months in the charts</label>
-                        <div class="month-checks" id="monthChecks"></div>
+                    <div class="form-group" style="max-width: 240px;">
+                        <label class="form-label">Month</label>
+                        <select id="detailMonth" class="form-input" onchange="bindDownloads()"></select>
                     </div>
                     <div class="download-row" style="margin-top: 12px;">
                         <a id="dlAllocation" class="btn-secondary disabled" href="#">Download Cost Allocation</a>
                         <a id="dlSheet" class="btn-secondary disabled" href="#">Download Cost Sheet</a>
+                        <a id="dlHistory" class="btn-secondary disabled" href="#">Download history</a>
                     </div>
                     <div id="resultsStatus"></div>
                 </div>
@@ -966,138 +924,36 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">Charts</h2>
-                            <div class="card-subtitle" id="chartCaption">Select a processed month</div>
-                        </div>
-                    </div>
-                    <div class="chart-grid">
-                        <div class="chart-frame">
-                            <h3>Consumption (kWh)</h3>
-                            <div id="chartKwh"></div>
-                        </div>
-                        <div class="chart-frame">
-                            <h3>Allocated cost</h3>
-                            <div id="chartCost"></div>
-                        </div>
-                        <div class="chart-frame">
-                            <h3>Cost by centre</h3>
-                            <div id="chartCentres"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div>
-                            <h2 class="card-title">Consumption by account</h2>
-                            <div class="card-subtitle" id="consumptionCaption">Parsed bill kWh for the detail month</div>
-                        </div>
-                    </div>
-                    <div style="overflow-x: auto;">
-                        <table class="data-table" id="consumptionTable">
-                            <thead>
-                                <tr>
-                                    <th>Month</th>
-                                    <th>Account</th>
-                                    <th class="num">kWh</th>
-                                    <th class="num">Bill total</th>
-                                    <th class="num">FiT</th>
-                                    <th class="num">Allocation base</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div>
-                            <h2 class="card-title">Cost allocation</h2>
-                            <div class="card-subtitle">Live percent applied to the allocation base</div>
-                        </div>
-                    </div>
-                    <div style="overflow-x: auto;">
-                        <table class="data-table" id="allocationTable">
-                            <thead>
-                                <tr>
-                                    <th>Month</th>
-                                    <th>Account</th>
-                                    <th>Centre</th>
-                                    <th class="num">kWh share</th>
-                                    <th class="num">Live %</th>
-                                    <th class="num">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <div>
-                            <h2 class="card-title">Bill and meter history</h2>
-                            <div class="card-subtitle">Saved in masters/electricity_history.xlsx and kept across months</div>
-                        </div>
-                        <div class="card-actions">
-                            <a id="dlHistory" class="btn-secondary disabled" href="#">Download history</a>
+                            <h2 class="card-title">History</h2>
+                            <div class="card-subtitle">One button opens that item across the saved months</div>
                         </div>
                     </div>
                     <p class="results-note">
-                        Each processed month adds one row per electricity bill and one row per meter.
-                        The bill row is that account’s kWh and the charges printed on the bill.
-                        A meter row is that meter’s kWh. A meter charge is filled only when the bill
-                        prints one, which is the FiT line. The account total is not split across meters.
+                        Bill kWh and bill charges stay in the history workbook.
+                        Choose electricity bills, meters, or cost centres. Only that set of buttons is shown.
+                        Nothing is charted until a button is clicked.
+                        A cost centre’s kWh is each bill’s saved kWh times that month’s live percent.
+                        Its cost is the allocation amount. A meter cost is shown only when the bill prints one.
                     </p>
-                    <div class="filter-row" style="margin-top: 16px;">
-                        <div class="form-group">
-                            <label class="form-label">Bill</label>
-                            <select id="historyAccount" class="form-input" onchange="onHistoryAccount()">
-                                <option value="">All bills</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Meter</label>
-                            <select id="historyMeter" class="form-input" onchange="onHistoryMeter()">
-                                <option value="">All meters on the selected bill</option>
-                            </select>
-                        </div>
+                    <div class="mode-switch" role="group" aria-label="Which buttons to show">
+                        <button type="button" class="btn-secondary active" data-kind="bill" onclick="setItemKind('bill')">Electricity bills</button>
+                        <button type="button" class="btn-secondary" data-kind="meter" onclick="setItemKind('meter')">Meters</button>
+                        <button type="button" class="btn-secondary" data-kind="centre" onclick="setItemKind('centre')">Cost centres</button>
                     </div>
-                    <div id="historyStatus"></div>
-                    <div class="chart-grid" style="margin-top: 16px;">
-                        <div class="chart-frame">
-                            <h3>Bill kWh</h3>
-                            <div id="chartBillKwh"></div>
+                    <div class="item-buttons" id="itemButtons"></div>
+                    <p class="results-note" id="chartPlaceholder">Choose a button to open that item's history.</p>
+                    <div class="item-chart" id="itemChart" hidden>
+                        <h2 class="card-title" id="itemChartTitle" style="margin: 16px 0 12px;"></h2>
+                        <div class="chart-grid">
+                            <div class="chart-frame">
+                                <h3>kWh</h3>
+                                <div id="chartKwh"></div>
+                            </div>
+                            <div class="chart-frame">
+                                <h3>Cost</h3>
+                                <div id="chartCost"></div>
+                            </div>
                         </div>
-                        <div class="chart-frame">
-                            <h3>Bill charge</h3>
-                            <div id="chartBillCharge"></div>
-                        </div>
-                        <div class="chart-frame">
-                            <h3>Meter kWh</h3>
-                            <div id="chartMeterKwh"></div>
-                        </div>
-                        <div class="chart-frame">
-                            <h3>Meter charge printed on the bill</h3>
-                            <div id="chartMeterCharge"></div>
-                        </div>
-                    </div>
-                    <div style="overflow-x: auto; margin-top: 16px;">
-                        <table class="data-table" id="historyMeterTable">
-                            <thead>
-                                <tr>
-                                    <th>Month</th>
-                                    <th>Account</th>
-                                    <th>Meter</th>
-                                    <th class="num">kWh</th>
-                                    <th class="num">Previous</th>
-                                    <th class="num">Present</th>
-                                    <th class="num">Printed charge</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
                     </div>
                 </div>
             </div>
@@ -1390,6 +1246,7 @@
         }
 
         let processedMonths = [];
+        let itemKind = 'bill';
 
         function money(value) {
             const number = Number(value) || 0;
@@ -1399,6 +1256,14 @@
         function units(value) {
             const number = Number(value) || 0;
             return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
         }
 
         async function refreshMonths(prefer) {
@@ -1413,55 +1278,20 @@
             const previous = prefer || select.value;
             select.innerHTML = processedMonths.map((item) =>
                 `<option value="${item.month}">${item.month}</option>`
-            ).join('');
+            ).join('') || '<option value="">No processed month</option>';
             if (previous && processedMonths.some((item) => item.month === previous)) {
                 select.value = previous;
             }
-            const checks = document.getElementById('monthChecks');
-            checks.innerHTML = processedMonths.map((item) => `
-                <label>
-                    <input type="checkbox" value="${item.month}" checked onchange="loadCharts()" />
-                    ${item.month}
-                </label>
-            `).join('') || '<span class="results-note">No processed month yet. Run month-end from Intake.</span>';
-            if (processedMonths.length) {
-                await populateFilters();
-                await loadDetail();
-            } else {
-                clearResults();
-            }
-            await loadHistory();
+            bindDownloads();
+            clearItemChart();
+            await loadItemButtons();
         }
 
-        async function populateFilters() {
-            const response = await fetch(`${API_BASE}/api/charts`);
-            if (!response.ok) return;
-            const series = await response.json();
-            fillSelect(
-                'filterAccount',
-                (series.by_account || []).map((row) => row.name).filter(Boolean),
-                'All accounts'
-            );
-            fillSelect(
-                'filterCentre',
-                (series.by_centre || []).map((row) => row.name).filter(Boolean),
-                'All centres'
-            );
-        }
-
-        function clearResults() {
-            document.getElementById('kpiKwh').textContent = '—';
-            document.getElementById('kpiCost').textContent = '—';
-            document.getElementById('kpiAccounts').textContent = '—';
-            document.getElementById('kpiCentres').textContent = '—';
-            document.querySelector('#consumptionTable tbody').innerHTML = '';
-            document.querySelector('#allocationTable tbody').innerHTML = '';
-            document.getElementById('consumptionCaption').textContent = 'Parsed bill kWh for the months selected above';
-            document.getElementById('chartKwh').innerHTML = '';
-            document.getElementById('chartCost').innerHTML = '';
-            document.getElementById('chartCentres').innerHTML = '';
-            setDownload('dlAllocation', null);
-            setDownload('dlSheet', null);
+        function bindDownloads() {
+            const month = document.getElementById('detailMonth').value;
+            const meta = processedMonths.find((item) => item.month === month) || {};
+            setDownload('dlAllocation', month, 'cost-allocation', meta.cost_allocation);
+            setDownload('dlSheet', month, 'cost-sheet', meta.cost_sheet);
         }
 
         function setDownload(id, month, kind, ready) {
@@ -1475,152 +1305,6 @@
             link.href = `${API_BASE}/api/download/${month}/${kind}`;
         }
 
-        function fillSelect(id, values, allLabel) {
-            const select = document.getElementById(id);
-            const current = select.value;
-            const options = [`<option value="">${allLabel}</option>`]
-                .concat(values.map((value) => `<option value="${value}">${value}</option>`));
-            select.innerHTML = options.join('');
-            if (values.includes(current)) {
-                select.value = current;
-            }
-        }
-
-        async function loadDetail() {
-            const month = document.getElementById('detailMonth').value;
-            const status = document.getElementById('resultsStatus');
-            if (!month) {
-                clearResults();
-                return;
-            }
-            const meta = processedMonths.find((item) => item.month === month) || {};
-            setDownload('dlAllocation', month, 'cost-allocation', meta.cost_allocation);
-            setDownload('dlSheet', month, 'cost-sheet', meta.cost_sheet);
-            try {
-                const response = await fetch(`${API_BASE}/api/dashboard/${month}`);
-                if (!response.ok) {
-                    const error = await response.json();
-                    status.innerHTML = `<div class="status-alert error">${error.detail || 'No report for this month'}</div>`;
-                    return;
-                }
-                const report = await response.json();
-                status.innerHTML = '';
-                await loadCharts();
-            } catch (error) {
-                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
-            }
-        }
-
-        function renderTables(series) {
-            const centre = document.getElementById('filterCentre').value;
-            const accountsInFilter = new Set((series.rows || []).map((row) => `${row.month}|${row.account}`));
-            const bills = (series.bill_rows || []).filter((row) => !centre || accountsInFilter.has(`${row.month}|${row.account}`));
-            document.querySelector('#consumptionTable tbody').innerHTML = bills.map((row) => `
-                <tr>
-                    <td>${row.month}</td>
-                    <td>${row.account}</td>
-                    <td class="num">${units(row.kwh)}</td>
-                    <td class="num">${money(row.total_amount)}</td>
-                    <td class="num">${money(row.fit_amount)}</td>
-                    <td class="num">${money(row.allocation_base)}</td>
-                </tr>
-            `).join('');
-            document.querySelector('#allocationTable tbody').innerHTML = (series.rows || []).map((row) => `
-                <tr>
-                    <td>${row.month}</td>
-                    <td>${row.account}</td>
-                    <td>${row.centre}</td>
-                    <td class="num">${units(row.attributed_kwh)}</td>
-                    <td class="num">${(Number(row.percentage) * 100).toFixed(4)}%</td>
-                    <td class="num">${money(row.amount)}</td>
-                </tr>
-            `).join('');
-            document.getElementById('consumptionCaption').textContent = centre
-                ? 'Parsed bills for accounts that have the selected centre. Chart kWh is the live-percent share.'
-                : 'Parsed bill kWh for the months selected above';
-        }
-
-        function selectedChartMonths() {
-            return [...document.querySelectorAll('#monthChecks input:checked')].map((box) => box.value);
-        }
-
-        async function loadCharts() {
-            const months = selectedChartMonths();
-            const account = document.getElementById('filterAccount').value;
-            const centre = document.getElementById('filterCentre').value;
-            if (!months.length) {
-                document.getElementById('kpiKwh').textContent = units(0);
-                document.getElementById('kpiCost').textContent = money(0);
-                document.getElementById('chartKwh').innerHTML = '<p class="results-note">Select at least one month.</p>';
-                document.getElementById('chartCost').innerHTML = '';
-                document.getElementById('chartCentres').innerHTML = '';
-                document.getElementById('chartCaption').textContent = 'No months selected';
-                return;
-            }
-            const params = new URLSearchParams();
-            if (months.length) params.set('months', months.join(','));
-            if (account) params.set('account', account);
-            if (centre) params.set('centre', centre);
-            const response = await fetch(`${API_BASE}/api/charts?${params.toString()}`);
-            const series = await response.json();
-            if (!response.ok) {
-                document.getElementById('chartCaption').textContent = series.detail || 'Chart request failed';
-                return;
-            }
-            const kwhTotal = (series.kwh || []).reduce((sum, value) => sum + Number(value), 0);
-            const costTotal = (series.cost || []).reduce((sum, value) => sum + Number(value), 0);
-            document.getElementById('kpiKwh').textContent = units(kwhTotal);
-            document.getElementById('kpiCost').textContent = money(costTotal);
-            document.getElementById('kpiAccounts').textContent = (series.by_account || []).length;
-            document.getElementById('kpiCentres').textContent = (series.by_centre || []).length;
-            const filterBits = [
-                months.length ? months.join(', ') : 'no months',
-                account || 'all accounts',
-                centre || 'all centres',
-            ];
-            document.getElementById('chartCaption').textContent = filterBits.join(' · ');
-            document.getElementById('chartKwh').innerHTML = barChart(series.months, series.kwh, '#2563eb', 'kWh');
-            document.getElementById('chartCost').innerHTML = barChart(series.months, series.cost, '#0f766e', 'HKD');
-            document.getElementById('chartCentres').innerHTML = barChart(
-                (series.by_centre || []).map((row) => row.name),
-                (series.by_centre || []).map((row) => row.cost),
-                '#b45309',
-                'HKD'
-            );
-            renderTables(series);
-        }
-
-        function barChart(labels, values, color, unit) {
-            labels = labels || [];
-            values = (values || []).map((value) => Number(value) || 0);
-            if (!labels.length) {
-                return '<p class="results-note">Nothing to chart for this filter.</p>';
-            }
-            const width = Math.max(320, labels.length * 72);
-            const height = 200;
-            const padLeft = 8;
-            const padBottom = 36;
-            const padTop = 16;
-            const max = Math.max(...values, 0);
-            const scale = max > 0 ? (height - padTop - padBottom) / max : 0;
-            const gap = 12;
-            const barWidth = Math.max(18, (width - padLeft * 2) / labels.length - gap);
-            const bars = labels.map((label, index) => {
-                const barHeight = values[index] * scale;
-                const x = padLeft + index * (barWidth + gap);
-                const y = height - padBottom - barHeight;
-                const shown = unit === 'HKD' ? money(values[index]) : units(values[index]);
-                return `
-                    <g>
-                        <rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barHeight, 0)}" rx="4" fill="${color}"></rect>
-                        <text x="${x + barWidth / 2}" y="${height - 16}" text-anchor="middle" font-size="11" fill="currentColor">${label}</text>
-                        <title>${label}: ${shown}</title>
-                    </g>
-                `;
-            }).join('');
-            return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${unit} chart">${bars}</svg>`;
-        }
-
         function setHistoryDownload(ready) {
             const link = document.getElementById('dlHistory');
             if (!ready) {
@@ -1632,93 +1316,113 @@
             link.href = `${API_BASE}/api/history/download`;
         }
 
-        function fillHistoryMeters(choices, account) {
-            const select = document.getElementById('historyMeter');
-            const current = select.value;
-            const meters = (choices || []).filter((row) => !account || row.account === account);
-            select.innerHTML = [`<option value="">All meters on the selected bill</option>`]
-                .concat(meters.map((row) => `<option value="${row.meter_no}" data-account="${row.account}">${row.meter_no} · ${row.account}</option>`))
-                .join('');
-            if (meters.some((row) => row.meter_no === current)) {
-                select.value = current;
-            }
+        function clearItemChart() {
+            document.getElementById('itemChart').hidden = true;
+            document.getElementById('chartPlaceholder').hidden = false;
+            document.getElementById('chartKwh').innerHTML = '';
+            document.getElementById('chartCost').innerHTML = '';
+            document.getElementById('itemChartTitle').textContent = '';
         }
 
-        function onHistoryAccount() {
-            document.getElementById('historyMeter').value = '';
-            loadHistory();
+        function setItemKind(kind) {
+            itemKind = kind;
+            document.querySelectorAll('.mode-switch button').forEach((button) => {
+                button.classList.toggle('active', button.dataset.kind === kind);
+            });
+            clearItemChart();
+            loadItemButtons();
         }
 
-        function onHistoryMeter() {
-            const option = document.getElementById('historyMeter').selectedOptions[0];
-            const owner = option && option.dataset.account;
-            if (owner) document.getElementById('historyAccount').value = owner;
-            loadHistory();
-        }
-
-        async function loadHistory() {
-            const account = document.getElementById('historyAccount').value;
-            const meter = document.getElementById('historyMeter').value;
-            const params = new URLSearchParams();
-            if (account) params.set('account', account);
-            if (meter) params.set('meter', meter);
-            const status = document.getElementById('historyStatus');
+        async function loadItemButtons() {
+            const box = document.getElementById('itemButtons');
+            const status = document.getElementById('resultsStatus');
             try {
-                const response = await fetch(`${API_BASE}/api/history?${params.toString()}`);
-                const series = await response.json();
+                const response = await fetch(`${API_BASE}/api/history/items?kind=${encodeURIComponent(itemKind)}`);
+                const payload = await response.json();
                 if (!response.ok) {
-                    status.innerHTML = `<div class="status-alert error">${series.detail || 'No history'}</div>`;
+                    status.innerHTML = `<div class="status-alert error">${payload.detail || 'Could not load buttons'}</div>`;
+                    box.innerHTML = '';
                     setHistoryDownload(false);
                     return;
                 }
-                const ready = (series.bills || []).length || (series.meters || []).length;
-                setHistoryDownload(ready);
-                if (!ready) {
-                    status.innerHTML = '<div class="status-alert info">Process a month to start the history file.</div>';
-                    document.getElementById('chartBillKwh').innerHTML = '';
-                    document.getElementById('chartBillCharge').innerHTML = '';
-                    document.getElementById('chartMeterKwh').innerHTML = '';
-                    document.getElementById('chartMeterCharge').innerHTML = '';
-                    document.querySelector('#historyMeterTable tbody').innerHTML = '';
+                status.innerHTML = '';
+                setHistoryDownload(payload.history);
+                const items = payload.items || [];
+                if (!items.length) {
+                    box.innerHTML = '<p class="results-note">Nothing saved for this choice yet.</p>';
                     return;
                 }
-                status.innerHTML = '';
-                const accountSelect = document.getElementById('historyAccount');
-                accountSelect.innerHTML = ['<option value="">All bills</option>']
-                    .concat((series.accounts || []).map((item) => `<option value="${item}">${item}</option>`))
-                    .join('');
-                if (account) accountSelect.value = account;
-                fillHistoryMeters(series.meter_choices, account);
-                if (meter) document.getElementById('historyMeter').value = meter;
-                document.getElementById('chartBillKwh').innerHTML = barChart(series.months, series.bill_kwh, '#2563eb', 'kWh');
-                document.getElementById('chartBillCharge').innerHTML = barChart(series.months, series.bill_charge, '#0f766e', 'HKD');
-                document.getElementById('chartMeterKwh').innerHTML = barChart(series.months, series.meter_kwh, '#7c3aed', 'kWh');
-                const chargeLabels = [];
-                const chargeValues = [];
-                (series.months || []).forEach((month, index) => {
-                    const value = (series.meter_charge || [])[index];
-                    if (value !== null && value !== undefined) {
-                        chargeLabels.push(month);
-                        chargeValues.push(value);
-                    }
+                box.innerHTML = items.map((item) =>
+                    `<button type="button" class="btn-secondary" data-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
+                ).join('');
+                box.querySelectorAll('button').forEach((button) => {
+                    button.addEventListener('click', () => selectItem(button.dataset.id, button));
                 });
-                document.getElementById('chartMeterCharge').innerHTML = chargeLabels.length
-                    ? barChart(chargeLabels, chargeValues, '#b45309', 'HKD')
-                    : '<p class="results-note">No charge is printed for this meter. The account total stays on the bill.</p>';
-                document.querySelector('#historyMeterTable tbody').innerHTML = (series.meters || []).map((row) => `
-                    <tr>
-                        <td>${row.billing_month}</td>
-                        <td>${row.account}</td>
-                        <td>${row.meter_no}</td>
-                        <td class="num">${units(row.kwh)}</td>
-                        <td class="num">${row.previous == null ? '' : units(row.previous)}</td>
-                        <td class="num">${row.present == null ? '' : units(row.present)}</td>
-                        <td class="num">${row.charge == null ? '—' : money(row.charge)}</td>
-                    </tr>
-                `).join('');
             } catch (error) {
                 status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
             }
+        }
+
+        async function selectItem(itemId, button) {
+            document.querySelectorAll('#itemButtons button').forEach((candidate) => {
+                candidate.classList.toggle('active', candidate === button);
+            });
+            const params = new URLSearchParams({ kind: itemKind, item: itemId });
+            const response = await fetch(`${API_BASE}/api/history/item?${params.toString()}`);
+            const series = await response.json();
+            const status = document.getElementById('resultsStatus');
+            if (!response.ok) {
+                status.innerHTML = `<div class="status-alert error">${series.detail || 'No history for that item'}</div>`;
+                clearItemChart();
+                return;
+            }
+            status.innerHTML = '';
+            document.getElementById('chartPlaceholder').hidden = true;
+            document.getElementById('itemChart').hidden = false;
+            document.getElementById('itemChartTitle').textContent = series.label || itemId;
+            document.getElementById('chartKwh').innerHTML = barChart(series.months, series.kwh, '#2563eb', 'kWh');
+            const costs = series.cost || [];
+            const printed = costs.some((value) => value !== null && value !== undefined);
+            document.getElementById('chartCost').innerHTML = printed
+                ? barChart(series.months, costs, '#0f766e', 'HKD')
+                : `<p class="results-note">${escapeHtml(series.note || 'No cost is stored for this item.')}</p>`;
+        }
+
+        function barChart(labels, values, color, unit) {
+            labels = labels || [];
+            const numbers = (values || []).map((value) => (
+                value === null || value === undefined || value === '' ? null : Number(value)
+            ));
+            const present = numbers.filter((value) => value !== null && !Number.isNaN(value));
+            if (!labels.length || !present.length) {
+                return '<p class="results-note">Nothing to chart for this item.</p>';
+            }
+            const width = Math.max(320, labels.length * 72);
+            const height = 200;
+            const padLeft = 8;
+            const padBottom = 36;
+            const padTop = 16;
+            const max = Math.max(...present, 0);
+            const scale = max > 0 ? (height - padTop - padBottom) / max : 0;
+            const gap = 12;
+            const barWidth = Math.max(18, (width - padLeft * 2) / labels.length - gap);
+            const bars = labels.map((label, index) => {
+                const value = numbers[index];
+                const missing = value === null || Number.isNaN(value);
+                const barHeight = missing ? 0 : value * scale;
+                const x = padLeft + index * (barWidth + gap);
+                const y = height - padBottom - barHeight;
+                const shown = missing ? 'not printed' : (unit === 'HKD' ? money(value) : units(value));
+                const rect = missing ? '' : `<rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barHeight, 0)}" rx="4" fill="${color}"></rect>`;
+                return `
+                    <g>
+                        ${rect}
+                        <text x="${x + barWidth / 2}" y="${height - 16}" text-anchor="middle" font-size="11" fill="currentColor">${escapeHtml(label)}</text>
+                        <title>${escapeHtml(label)}: ${escapeHtml(shown)}</title>
+                    </g>
+                `;
+            }).join('');
+            return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${unit} chart">${bars}</svg>`;
         }
     </script>
 </body>

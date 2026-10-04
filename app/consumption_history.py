@@ -240,6 +240,166 @@ def history_series(
     }
 
 
+def _meter_id(account: str, meter_no: str) -> str:
+    return f'{account}|{meter_no}'
+
+
+def history_items(records: Dict[str, List[Dict]], reports: Iterable[Dict], kind: str) -> List[Dict]:
+    """
+    One button per bill, meter, or cost centre.
+
+    The list is ids and labels only. kWh and charges stay in the workbook.
+    """
+    if kind == 'bill':
+        accounts = sorted({
+            row.get('account')
+            for row in records.get('bills') or []
+            if row.get('account')
+        })
+        return [{'id': account, 'label': account} for account in accounts]
+    if kind == 'meter':
+        seen = set()
+        meters = []
+        for row in records.get('meters') or []:
+            meter_no = str(row.get('meter_no') or '').strip()
+            account = row.get('account') or ''
+            if not meter_no:
+                continue
+            item_id = _meter_id(account, meter_no)
+            if item_id in seen:
+                continue
+            seen.add(item_id)
+            meters.append({'id': item_id, 'label': meter_no, 'account': account})
+        counts: Dict[str, int] = {}
+        for item in meters:
+            counts[item['label']] = counts.get(item['label'], 0) + 1
+        buttons = []
+        for item in sorted(meters, key=lambda item: (item['label'], item['account'])):
+            label = item['label']
+            if counts[label] > 1 and item['account']:
+                label = f"{label} · {item['account']}"
+            buttons.append({'id': item['id'], 'label': label})
+        return buttons
+    if kind == 'centre':
+        centres = sorted({
+            (line.get('centre') or '')
+            for report in reports or []
+            for line in report.get('allocations') or []
+            if line.get('centre')
+        })
+        return [{'id': centre, 'label': centre} for centre in centres]
+    raise ValueError('kind must be bill, meter, or centre')
+
+
+def _rows_for_month(rows: List[Dict], month: str) -> List[Dict]:
+    return [row for row in rows if str(row.get('billing_month')) == month]
+
+
+def _history_bill_kwh(records: Dict[str, List[Dict]], month: str, account: str) -> float:
+    total = 0.0
+    for row in records.get('bills') or []:
+        if str(row.get('billing_month')) == month and row.get('account') == account:
+            total += float(row.get('kwh') or 0)
+    return total
+
+
+def item_chart_series(
+    records: Dict[str, List[Dict]],
+    reports: Iterable[Dict],
+    kind: str,
+    item_id: str,
+) -> Optional[Dict]:
+    """
+    kWh and cost for one clicked item, across the months saved for it.
+
+    Bill and meter numbers are read from the history workbook. A meter cost
+    is null when that month has no printed charge. A cost centre's kWh is
+    each account's history kWh times that month's saved live percent. The
+    centre cost is the saved allocation amount, not a meter charge.
+    """
+    if kind == 'bill':
+        rows = [row for row in records.get('bills') or [] if row.get('account') == item_id]
+        if not rows:
+            return None
+        months = sorted({str(row.get('billing_month')) for row in rows if row.get('billing_month')})
+        kwh = []
+        cost = []
+        for month in months:
+            month_rows = _rows_for_month(rows, month)
+            kwh.append(sum(float(row.get('kwh') or 0) for row in month_rows))
+            cost.append(sum(float(row.get('total_amount') or 0) for row in month_rows))
+        return _chart(kind, item_id, item_id, months, kwh, cost, None)
+
+    if kind == 'meter':
+        meters = list(records.get('meters') or [])
+        if '|' in item_id:
+            account, meter_no = item_id.split('|', 1)
+            rows = [
+                row for row in meters
+                if row.get('account') == account and str(row.get('meter_no')) == meter_no
+            ]
+            label = meter_no
+        else:
+            rows = [row for row in meters if str(row.get('meter_no')) == item_id]
+            label = item_id
+        if not rows:
+            return None
+        months = sorted({str(row.get('billing_month')) for row in rows if row.get('billing_month')})
+        kwh = []
+        cost = []
+        for month in months:
+            month_rows = _rows_for_month(rows, month)
+            kwh.append(sum(float(row.get('kwh') or 0) for row in month_rows))
+            printed = [float(row['charge']) for row in month_rows if row.get('charge') is not None]
+            cost.append(sum(printed) if printed else None)
+        note = None
+        if all(value is None for value in cost):
+            note = 'No charge is printed for this meter. The account total stays on the bill.'
+        return _chart(kind, item_id, label, months, kwh, cost, note)
+
+    if kind == 'centre':
+        selected = []
+        for report in reports or []:
+            lines = [
+                line for line in report.get('allocations') or []
+                if line.get('centre') == item_id
+            ]
+            if lines:
+                selected.append((report.get('billing_month'), lines))
+        selected = [pair for pair in selected if pair[0]]
+        if not selected:
+            return None
+        selected.sort(key=lambda pair: pair[0])
+        months = []
+        kwh = []
+        cost = []
+        for month, lines in selected:
+            months.append(month)
+            attributed = 0.0
+            amount = 0.0
+            for line in lines:
+                attributed += _history_bill_kwh(records, month, line.get('account') or '') * float(line.get('percentage') or 0)
+                amount += float(line.get('amount') or 0)
+            kwh.append(attributed)
+            cost.append(amount)
+        return _chart(kind, item_id, item_id, months, kwh, cost, None)
+
+    raise ValueError('kind must be bill, meter, or centre')
+
+
+def _chart(kind, item_id, label, months, kwh, cost, note) -> Dict:
+    return {
+        'kind': kind,
+        'id': item_id,
+        'label': label,
+        'months': months,
+        'kwh': kwh,
+        'cost': cost,
+        'source': 'electricity_history',
+        'note': note,
+    }
+
+
 def history_choices(records: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
     accounts = []
     seen_accounts = set()

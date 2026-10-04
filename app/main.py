@@ -743,6 +743,37 @@ async def dashboard_charts(
     )
 
 
+@app.get("/api/history/items")
+async def history_item_buttons(kind: str = "bill"):
+    """Button labels for bills, meters, or cost centres. No kWh or charges."""
+    from app.consumption_history import history_items, history_path, load_history
+    from app.dashboard_data import load_all_reports
+    if kind not in ("bill", "meter", "centre"):
+        raise HTTPException(400, "kind must be bill, meter, or centre")
+    root = get_metropolis_root()
+    return {
+        "kind": kind,
+        "items": history_items(load_history(root), load_all_reports(root), kind),
+        "history": history_path(root).is_file(),
+    }
+
+
+@app.get("/api/history/item")
+async def history_item_chart(kind: str, item: str):
+    """kWh and cost for one clicked item, read from the history workbook."""
+    from app.consumption_history import item_chart_series, load_history
+    from app.dashboard_data import load_all_reports
+    if kind not in ("bill", "meter", "centre"):
+        raise HTTPException(400, "kind must be bill, meter, or centre")
+    if not item:
+        raise HTTPException(400, "item is required")
+    root = get_metropolis_root()
+    series = item_chart_series(load_history(root), load_all_reports(root), kind, item)
+    if series is None:
+        raise HTTPException(404, "No saved history for that item")
+    return series
+
+
 @app.get("/api/history")
 async def electricity_history(
     account: Optional[str] = None,
