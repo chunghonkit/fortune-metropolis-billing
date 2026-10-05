@@ -138,6 +138,10 @@ def _append_meter(out_list, seen, meter_no, consumption, factor=1, previous=None
         'previous': previous,
         'present': present,
         'consumption': consumption,
+        # The first register row. A later negative row is the adjustment
+        # Elect Charge writes as its own term (82374+3035-0).
+        'primary': consumption,
+        'adjustment': 0,
     })
     seen.add(meter_no)
     return consumption
@@ -195,6 +199,7 @@ def _add_meter_units(meters, seen, meter_no, units, factor=1, previous=None, pre
         if meter['meter_no'] != meter_no:
             continue
         meter['consumption'] = meter['consumption'] + units
+        meter['adjustment'] = meter.get('adjustment', 0) + units
         return meter['consumption']
     return _append_meter(meters, seen, meter_no, units, factor, previous, present)
 
@@ -354,6 +359,10 @@ def parse_clp_bill(pdf_path):
         "deposit_interest": 0.0,
         "meters": [],
         "avg_daily": None,
+        "billed_units": None,
+        "reversed_units": None,
+        "reversed_to": None,
+        "fit_lines": [],
         "validation": {}
     }
 
@@ -540,6 +549,44 @@ def parse_clp_bill(pdf_path):
     m_less = re.search(r'Less Electricity Charge[^\-]*-([\d,]+\.\d{2})', text, re.I | re.S)
     if m_less:
         out["less_charge"] = -float(m_less.group(1).replace(",", ""))
+
+    # Units the Cost Sheet calls "Totally KWH Consumed".
+    # Bulk bills bill the fuel-cost units, which can be lower than the
+    # grand total (the chiller grand total includes meter 9044688).
+    # An adjusted bimonthly bill's fuel units cover the whole corrected
+    # period; the reversed slice is subtracted later.
+    m_fuel_units = re.search(r'Fuel Cost Adjustment:\s+([\d,]+)\s+units', text)
+    if not m_fuel_units:
+        m_fuel_units = re.search(
+            r'Fuel Cost Adjustment:\s+Sub-total\s*\(([\d,]+)\s+units\)',
+            text,
+        )
+    if m_fuel_units:
+        out["billed_units"] = _number(m_fuel_units.group(1))
+    elif out["kwh"] is not None:
+        out["billed_units"] = out["kwh"]
+
+    m_rev = re.search(
+        r'Less Electricity Charge\s+from\s+(\d{2}-\d{2}-\d{2})\s+to\s+(\d{2}-\d{2}-\d{2})',
+        text,
+    )
+    if m_rev:
+        out["reversed_to"] = m_rev.group(2)
+        breakdown = re.search(r'Breakdown of [\s\S]{0,40}Less Electricity Charge[\s\S]{0,500}', text)
+        if breakdown:
+            m_rev_units = re.search(r'([\d,]+)\s+units', breakdown.group(0))
+            if m_rev_units:
+                out["reversed_units"] = _number(m_rev_units.group(1))
+
+    out["fit_lines"] = []
+    for meter_no, amount in re.findall(
+        r'(\d+)\(FiT\)\s+\d{2}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s+\d+\s+[\d.]+\s+\d+\s+-[\d.]+\s+-([\d,]+\.\d{2})',
+        text,
+    ):
+        out["fit_lines"].append({
+            "meter": meter_no,
+            "amount": float(amount.replace(",", "")),
+        })
 
     # Deposit Interest
     m_dep_int = re.search(r'Deposit Interest\s+-([\d,]+\.\d{2})', text, re.I)
