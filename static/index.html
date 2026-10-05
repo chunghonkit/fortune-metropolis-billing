@@ -191,6 +191,29 @@
         .theme-toggle-btn:hover {
             background: rgba(255, 255, 255, 0.15);
         }
+
+        .lang-switch {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .lang-switch button {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 8px 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .lang-switch button.active {
+            background: var(--color-primary);
+            border-color: var(--color-primary);
+        }
         
         /* Main Canvas */
         .main-canvas {
@@ -790,26 +813,31 @@
             </div>
             
             <div class="month-picker">
-                <div class="section-label">Billing Month</div>
-                <input type="text" id="monthInput" class="month-input" placeholder="YYYY-MM" />
-                <button class="btn-month" onclick="setMonth()">Set Month</button>
+                <div class="section-label" data-i18n="billingMonth">Billing Month</div>
+                <input type="text" id="monthInput" class="month-input" data-i18n-placeholder="monthFormat" placeholder="YYYY-MM" />
+                <button class="btn-month" data-i18n="setMonth" onclick="setMonth()">Set Month</button>
             </div>
             
             <nav class="nav-items">
-                <div class="section-label">Navigation</div>
+                <div class="section-label" data-i18n="navigation">Navigation</div>
                 <div class="nav-item active" data-view="intake" onclick="showView('intake')">
                     <span class="nav-icon">📄</span>
-                    <span>Intake</span>
+                    <span data-i18n="intake">Intake</span>
                 </div>
                 <div class="nav-item" data-view="results" onclick="openResults()">
                     <span class="nav-icon">📊</span>
-                    <span>Consumption</span>
+                    <span data-i18n="consumption">Consumption</span>
                 </div>
             </nav>
+
+            <div class="lang-switch" role="group" data-i18n-aria="ariaLanguage" aria-label="Language">
+                <button type="button" data-lang="en" onclick="setLanguage('en')">English</button>
+                <button type="button" data-lang="zh" onclick="setLanguage('zh')">繁體中文</button>
+            </div>
             
             <button class="theme-toggle-btn" onclick="toggleTheme()">
                 <span id="themeIcon">🌙</span>
-                <span>Toggle Theme</span>
+                <span data-i18n="toggleTheme">Toggle Theme</span>
             </button>
         </aside>
         
@@ -819,24 +847,24 @@
                 <!-- KPI Row -->
                 <div class="kpi-row">
                     <div class="kpi-card">
-                        <div class="kpi-label">Matched</div>
+                        <div class="kpi-label" data-i18n="matched">Matched</div>
                         <div class="kpi-value" id="kpiMatched">0 / 15</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-label">Missing</div>
+                        <div class="kpi-label" data-i18n="missing">Missing</div>
                         <div class="kpi-value error" id="kpiMissing">15</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-label">Wrong Month</div>
+                        <div class="kpi-label" data-i18n="wrongMonth">Wrong Month</div>
                         <div class="kpi-value warning" id="kpiWrongMonth">0</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-label">Duplicates</div>
+                        <div class="kpi-label" data-i18n="duplicates">Duplicates</div>
                         <div class="kpi-value warning" id="kpiDuplicates">0</div>
                     </div>
                     <div class="kpi-card">
-                        <div class="kpi-label">Gate Status</div>
-                        <div class="kpi-value error" id="kpiGate">Blocked</div>
+                        <div class="kpi-label" data-i18n="gateStatus">Gate Status</div>
+                        <div class="kpi-value error" id="kpiGate" data-i18n="blocked">Blocked</div>
                     </div>
                 </div>
                 
@@ -844,17 +872,17 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">Upload Bills</h2>
-                            <div class="card-subtitle" id="lastScanTime">Select and upload PDF files</div>
+                            <h2 class="card-title" data-i18n="uploadBills">Upload Bills</h2>
+                            <div class="card-subtitle" id="lastScanTime" data-i18n="selectUpload">Select and upload PDF files</div>
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Select PDF files (up to 15)</label>
+                        <label class="form-label" data-i18n="selectPdf">Select PDF files (up to 15)</label>
                         <input type="file" id="billFiles" class="form-input" accept=".pdf" multiple />
                     </div>
-                    <button class="btn-primary" onclick="uploadBills()">
-                        ⬆️ Upload & Parse Bills
+                    <button class="btn-primary" data-i18n="uploadParse" onclick="uploadBills()">
+                        Upload & Parse Bills
                     </button>
                     <div id="uploadStatus"></div>
                 </div>
@@ -863,8 +891,8 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">15 Expected Accounts</h2>
-                            <div class="card-subtitle">Metropolis CLP accounts with live status</div>
+                            <h2 class="card-title" data-i18n="expectedAccounts">15 Expected Accounts</h2>
+                            <div class="card-subtitle" data-i18n="accountsSubtitle">Metropolis CLP accounts with live status</div>
                         </div>
                     </div>
                     
@@ -877,30 +905,30 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">Meter Log</h2>
-                            <div class="card-subtitle">Check-meter 6681757 (散熱水泵電 / Sea Water Pump)</div>
+                            <h2 class="card-title" data-i18n="meterLog">Meter Log</h2>
+                            <div class="card-subtitle" data-i18n="meterSubtitle">Check-meter 6681757 (散熱水泵電 / Sea Water Pump)</div>
                         </div>
                         <div class="card-actions">
-                            <button class="btn-success" onclick="saveMeterLog()">
-                                💾 Save
+                            <button class="btn-success" data-i18n="save" onclick="saveMeterLog()">
+                                Save
                             </button>
-                            <button class="btn-secondary" onclick="downloadMeterLog()">
-                                📥 Download Excel
+                            <button class="btn-secondary" data-i18n="downloadExcel" onclick="downloadMeterLog()">
+                                Download Excel
                             </button>
                         </div>
                     </div>
                     
                     <div class="meter-form">
                         <div class="form-group">
-                            <label class="form-label">Previous Reading</label>
-                            <input type="number" step="0.1" id="meterPrevious" class="form-input" placeholder="e.g., 95966.6" />
+                            <label class="form-label" data-i18n="previousReading">Previous Reading</label>
+                            <input type="number" step="0.1" id="meterPrevious" class="form-input" data-i18n-placeholder="examplePrevious" placeholder="e.g., 95966.6" />
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Present Reading</label>
-                            <input type="number" step="0.1" id="meterPresent" class="form-input" placeholder="e.g., 96323.1" />
+                            <label class="form-label" data-i18n="presentReading">Present Reading</label>
+                            <input type="number" step="0.1" id="meterPresent" class="form-input" data-i18n-placeholder="examplePresent" placeholder="e.g., 96323.1" />
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Read Date (optional)</label>
+                            <label class="form-label" data-i18n="readDate">Read Date (optional)</label>
                             <input type="date" id="meterDate" class="form-input" />
                         </div>
                     </div>
@@ -911,12 +939,12 @@
                 <div id="gateBanner" class="gate-banner pending">
                     <div class="gate-content">
                         <div class="gate-info">
-                            <div class="gate-title">Gate Validation</div>
-                            <div class="gate-summary">Set month and parse bills to validate gate conditions</div>
+                            <div class="gate-title" data-i18n="gateValidation">Gate Validation</div>
+                            <div class="gate-summary" data-i18n="gatePrompt">Set month and parse bills to validate gate conditions</div>
                             <div class="gate-errors" id="gateErrors"></div>
                         </div>
-                        <button id="continueBtn" class="btn-success" onclick="continueToPart2()" disabled>
-                            ▶️ Continue to Part 2
+                        <button id="continueBtn" class="btn-success" data-i18n="continuePart2" onclick="continueToPart2()" disabled>
+                            Continue to Part 2
                         </button>
                     </div>
                 </div>
@@ -926,18 +954,18 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">Downloads</h2>
-                            <div class="card-subtitle">Workbooks written for the selected month, and the history file</div>
+                            <h2 class="card-title" data-i18n="downloads">Downloads</h2>
+                            <div class="card-subtitle" data-i18n="downloadsSubtitle">Workbooks written for the selected month, and the history file</div>
                         </div>
                     </div>
                     <div class="form-group" style="max-width: 240px;">
-                        <label class="form-label">Month</label>
+                        <label class="form-label" data-i18n="month">Month</label>
                         <select id="detailMonth" class="form-input" onchange="bindDownloads()"></select>
                     </div>
                     <div class="download-row" style="margin-top: 12px;">
-                        <a id="dlAllocation" class="btn-secondary disabled" href="#">Download Cost Allocation</a>
-                        <a id="dlSheet" class="btn-secondary disabled" href="#">Download Cost Sheet</a>
-                        <a id="dlHistory" class="btn-secondary disabled" href="#">Download history</a>
+                        <a id="dlAllocation" class="btn-secondary disabled" data-i18n="downloadAllocation" href="#">Download Cost Allocation</a>
+                        <a id="dlSheet" class="btn-secondary disabled" data-i18n="downloadSheet" href="#">Download Cost Sheet</a>
+                        <a id="dlHistory" class="btn-secondary disabled" data-i18n="downloadHistory" href="#">Download history</a>
                     </div>
                     <div id="resultsStatus"></div>
                 </div>
@@ -945,33 +973,33 @@
                 <div class="card">
                     <div class="card-header">
                         <div>
-                            <h2 class="card-title">History</h2>
-                            <div class="card-subtitle">One button opens that item across the saved months</div>
+                            <h2 class="card-title" data-i18n="history">History</h2>
+                            <div class="card-subtitle" data-i18n="historySubtitle">One button opens that item across the saved months</div>
                         </div>
                     </div>
-                    <p class="results-note">
+                    <p class="results-note" data-i18n="historyNote">
                         Bill kWh and bill charges stay in the history workbook.
                         Choose electricity bills, meters, or cost centres. Only that set of buttons is shown.
                         Nothing is charted until a button is clicked.
                         A cost centre’s kWh is each bill’s saved kWh times that month’s live percent.
                         Its cost is the allocation amount. A meter’s second series is a calculated share of the account charge, not an amount the bill printed.
                     </p>
-                    <div class="mode-switch" role="group" aria-label="Which buttons to show">
-                        <button type="button" class="btn-secondary active" data-kind="bill" onclick="setItemKind('bill')">Electricity bills</button>
-                        <button type="button" class="btn-secondary" data-kind="meter" onclick="setItemKind('meter')">Meters</button>
-                        <button type="button" class="btn-secondary" data-kind="centre" onclick="setItemKind('centre')">Cost centres</button>
+                    <div class="mode-switch" role="group" data-i18n-aria="ariaWhichButtons" aria-label="Which buttons to show">
+                        <button type="button" class="btn-secondary active" data-kind="bill" data-i18n="electricityBills" onclick="setItemKind('bill')">Electricity bills</button>
+                        <button type="button" class="btn-secondary" data-kind="meter" data-i18n="meters" onclick="setItemKind('meter')">Meters</button>
+                        <button type="button" class="btn-secondary" data-kind="centre" data-i18n="costCentres" onclick="setItemKind('centre')">Cost centres</button>
                     </div>
                     <div class="item-buttons" id="itemButtons"></div>
-                    <p class="results-note" id="chartPlaceholder">Choose a button to open that item's history.</p>
+                    <p class="results-note" id="chartPlaceholder" data-i18n="chartPlaceholder">Choose a button to open that item's history.</p>
                     <div class="item-chart" id="itemChart" hidden>
                         <h2 class="card-title" id="itemChartTitle" style="margin: 16px 0 12px;"></h2>
                         <div class="chart-grid">
                             <div class="chart-frame">
-                                <h3>kWh</h3>
+                                <h3 data-i18n="kwh">kWh</h3>
                                 <div id="chartKwh"></div>
                             </div>
                             <div class="chart-frame">
-                                <h3 id="chartCostTitle">Cost</h3>
+                                <h3 id="chartCostTitle" data-i18n="cost">Cost</h3>
                                 <div id="chartCost"></div>
                             </div>
                         </div>
@@ -981,27 +1009,117 @@
         </main>
     </div>
     
+    <script src="/i18n.js"></script>
     <script>
         const API_BASE = '';
+        const t = I18N.t;
+        const translateServer = I18N.translateServer;
         
         // Expected accounts with roles
         const EXPECTED_ACCOUNTS = [
-            { account: '55861-52267-1', role: 'Retail chillers → AC/SW' },
-            { account: '24096-78457-6', role: 'Multi-centre (office)' },
-            { account: '13639-58422-3', role: 'Office chiller → AO/OC' },
-            { account: '40722-61440-7', role: 'Multi-centre (carpark)' },
-            { account: '35204-69738-4', role: 'Multi-centre (carpark)' },
-            { account: '97968-02236-6', role: 'DC 100%' },
-            { account: '23529-59279-9', role: 'SW 100%' },
-            { account: '79292-23337-6', role: 'Office chiller → AO/OC' },
-            { account: '52167-13569-2', role: 'FiT (retail)' },
-            { account: '08731-83914-5', role: 'DC 100%' },
-            { account: '00776-78552-1', role: 'FiT' },
-            { account: '88931-57029-6', role: 'C 100%' },
-            { account: '70873-85471-3', role: 'SA 100%' },
-            { account: '72399-00664-9', role: 'SA 100%' },
-            { account: '82805-94744-7', role: 'Food Court → FC 100%' },
+            { account: '55861-52267-1', role: 'roleRetailChillers' },
+            { account: '24096-78457-6', role: 'roleOfficeMulti' },
+            { account: '13639-58422-3', role: 'roleOfficeChiller' },
+            { account: '40722-61440-7', role: 'roleCarpark' },
+            { account: '35204-69738-4', role: 'roleCarpark' },
+            { account: '97968-02236-6', role: 'roleDc' },
+            { account: '23529-59279-9', role: 'roleSw' },
+            { account: '79292-23337-6', role: 'roleOfficeChiller' },
+            { account: '52167-13569-2', role: 'roleFitRetail' },
+            { account: '08731-83914-5', role: 'roleDc' },
+            { account: '00776-78552-1', role: 'roleFit' },
+            { account: '88931-57029-6', role: 'roleC' },
+            { account: '70873-85471-3', role: 'roleSa' },
+            { account: '72399-00664-9', role: 'roleSa' },
+            { account: '82805-94744-7', role: 'roleFoodCourt' },
         ];
+
+        let lastGate = null;
+        let continueState = 'idle';
+        let chartItem = null;
+        let lastUploadClock = null;
+
+        function applyLanguage() {
+            document.documentElement.lang = I18N.activeLanguage() === 'zh' ? 'zh-Hant' : 'en';
+            document.title = t('pageTitle');
+            document.querySelectorAll('[data-i18n]').forEach((el) => {
+                el.textContent = t(el.dataset.i18n);
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+                el.placeholder = t(el.dataset.i18nPlaceholder);
+            });
+            document.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+                el.setAttribute('aria-label', t(el.dataset.i18nAria));
+            });
+            document.querySelectorAll('.lang-switch button').forEach((button) => {
+                button.classList.toggle('active', button.dataset.lang === I18N.activeLanguage());
+            });
+            const emptyMonth = document.querySelector('#detailMonth option[value=""]');
+            if (emptyMonth) emptyMonth.textContent = t('noProcessedMonth');
+            renderLastScan();
+            renderContinueButton();
+            document.querySelectorAll('[data-status-key],[data-server-message]').forEach(renderStoredStatus);
+        }
+
+        function setLanguage(lang) {
+            const chosen = I18N.rememberLanguage(localStorage, lang);
+            I18N.setActiveLanguage(chosen);
+            applyLanguage();
+            initAccountBoard();
+            if (lastGate) displayGate(lastGate);
+            if (chartItem) {
+                const button = document.querySelector(`#itemButtons button[data-id="${CSS.escape(chartItem)}"]`);
+                if (button) selectItem(chartItem, button);
+            } else {
+                const note = document.querySelector('#itemButtons .results-note');
+                if (note) note.textContent = t('nothingSaved');
+            }
+        }
+
+        function renderContinueButton() {
+            const button = document.getElementById('continueBtn');
+            const keys = {
+                idle: 'continuePart2',
+                processing: 'processingMonthEnd',
+                done: 'monthEndComplete',
+                failed: 'monthEndFailed',
+            };
+            button.textContent = t(keys[continueState] || 'continuePart2');
+        }
+
+        function renderLastScan() {
+            const el = document.getElementById('lastScanTime');
+            el.textContent = lastUploadClock ? t('lastUpload', { time: lastUploadClock }) : t('selectUpload');
+        }
+
+        function renderStoredStatus(el) {
+            if (el.dataset.statusKey) {
+                const vars = JSON.parse(el.dataset.statusVars || '{}');
+                const level = el.dataset.statusLevel || 'info';
+                const spin = level === 'info' ? '<span class="spinner"></span> ' : '';
+                el.innerHTML = `<div class="status-alert ${level}${level === 'info' ? ' pulse' : ''}">${spin}${escapeHtml(t(el.dataset.statusKey, vars))}</div>`;
+                return;
+            }
+            if (el.dataset.serverMessage) {
+                const level = el.dataset.statusLevel || 'error';
+                el.innerHTML = `<div class="status-alert ${level}">${escapeHtml(translateServer(el.dataset.serverMessage))}</div>`;
+            }
+        }
+
+        function showStatus(el, level, key, vars) {
+            el.dataset.statusKey = key;
+            el.dataset.statusLevel = level;
+            el.dataset.statusVars = JSON.stringify(vars || {});
+            delete el.dataset.serverMessage;
+            renderStoredStatus(el);
+        }
+
+        function showServerStatus(el, level, message) {
+            delete el.dataset.statusKey;
+            el.dataset.serverMessage = message == null ? '' : String(message);
+            el.dataset.statusLevel = level;
+            renderStoredStatus(el);
+        }
         
         // Theme Toggle
         function toggleTheme() {
@@ -1026,6 +1144,9 @@
             refreshMonths();
         });
 
+        I18N.setActiveLanguage(I18N.savedLanguage(localStorage));
+        applyLanguage();
+
         function showView(name) {
             document.getElementById('intakeView').hidden = name !== 'intake';
             document.getElementById('resultsView').hidden = name !== 'results';
@@ -1045,7 +1166,7 @@
             board.innerHTML = EXPECTED_ACCOUNTS.map(({ account, role }) => `
                 <div class="account-tile empty" id="tile-${account}">
                     <div class="account-number">${account}</div>
-                    <div class="account-role">${role}</div>
+                    <div class="account-role">${escapeHtml(t(role))}</div>
                     <div class="account-status">—</div>
                 </div>
             `).join('');
@@ -1082,7 +1203,7 @@
             const status = document.getElementById('uploadStatus');
             
             if (!fileInput.files.length) {
-                status.innerHTML = '<div class="status-alert error">Please select PDF files</div>';
+                showStatus(status, 'error', 'pleaseSelectPdf');
                 return;
             }
             
@@ -1091,7 +1212,7 @@
                 formData.append('files', file);
             }
             
-            status.innerHTML = '<div class="status-alert info pulse"><span class="spinner"></span> Uploading and parsing...</div>';
+            showStatus(status, 'info', 'uploading');
             
             try {
                 const response = await fetch(`${API_BASE}/api/upload-bills`, {
@@ -1102,15 +1223,16 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    const now = new Date().toLocaleTimeString();
-                    document.getElementById('lastScanTime').textContent = `Last upload: ${now}`;
-                    status.innerHTML = `<div class="status-alert success">✓ Parsed ${result.bills_parsed} bills</div>`;
+                    const locale = I18N.activeLanguage() === 'zh' ? 'zh-HK' : 'en-HK';
+                    lastUploadClock = new Date().toLocaleTimeString(locale);
+                    renderLastScan();
+                    showStatus(status, 'success', 'parsedBills', { n: result.bills_parsed });
                     displayGate(result.gate_status);
                 } else {
-                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
+                    showServerStatus(status, 'error', result.message || t('unknownError'));
                 }
             } catch (error) {
-                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+                showStatus(status, 'error', 'networkError', { message: error.message });
             }
         }
         
@@ -1123,7 +1245,8 @@
             document.getElementById('kpiMissing').textContent = gate.summary.missing;
             document.getElementById('kpiWrongMonth').textContent = gate.summary.wrong_month;
             document.getElementById('kpiDuplicates').textContent = gate.summary.duplicates;
-            document.getElementById('kpiGate').textContent = gate.passed ? 'Passed' : 'Blocked';
+            lastGate = gate;
+            document.getElementById('kpiGate').textContent = gate.passed ? t('passed') : t('blocked');
             document.getElementById('kpiGate').className = gate.passed ? 'kpi-value success' : 'kpi-value error';
             
             // Update account tiles
@@ -1132,11 +1255,11 @@
                 if (tile) {
                     tile.className = `account-tile ${info.status}`;
                     const statusLabel = {
-                        'matched': '✓ Matched',
-                        'missing': '— Missing',
-                        'duplicate': '⚠ Duplicate',
-                        'wrong_month': '⚠ Wrong Month',
-                        'unrecognised': '✗ Unrecognised'
+                        'matched': t('statusMatched'),
+                        'missing': t('statusMissing'),
+                        'duplicate': t('statusDuplicate'),
+                        'wrong_month': t('statusWrongMonth'),
+                        'unrecognised': t('statusUnrecognised')
                     }[info.status];
                     tile.querySelector('.account-status').textContent = statusLabel;
                 }
@@ -1152,14 +1275,17 @@
             const errors = document.getElementById('gateErrors');
             
             if (gate.passed) {
-                title.textContent = '✓ Gate PASSED';
-                summary.textContent = 'All conditions met. Ready to continue to Part 2.';
+                title.textContent = t('gatePassedTitle');
+                summary.textContent = t('gateReady');
                 errors.textContent = '';
             } else {
-                title.textContent = 'Gate Validation';
-                summary.textContent = `${gate.summary.matched}/15 matched, ${gate.summary.missing} missing`;
+                title.textContent = t('gateValidation');
+                summary.textContent = t('gateSummary', {
+                    matched: gate.summary.matched,
+                    missing: gate.summary.missing,
+                });
                 if (gate.errors.length > 0) {
-                    errors.textContent = gate.errors.join(' • ');
+                    errors.textContent = gate.errors.map((item) => translateServer(item)).join(' • ');
                 }
             }
             
@@ -1174,7 +1300,7 @@
             const status = document.getElementById('meterStatus');
             
             if (!previous || !present) {
-                status.innerHTML = '<div class="status-alert error">Please enter both readings</div>';
+                showStatus(status, 'error', 'pleaseEnterReadings');
                 return;
             }
             
@@ -1183,7 +1309,7 @@
             formData.append('present', present);
             if (readDate) formData.append('read_date', readDate);
             
-            status.innerHTML = '<div class="status-alert info"><span class="spinner"></span> Saving...</div>';
+            showStatus(status, 'info', 'saving');
             
             try {
                 const response = await fetch(`${API_BASE}/api/meter-log`, {
@@ -1195,13 +1321,14 @@
                 
                 if (result.success) {
                     const delta = result.delta || 0;
-                    status.innerHTML = `<div class="status-alert success">✓ Saved: Δ = ${delta.toLocaleString()} kWh</div>`;
+                    const locale = I18N.activeLanguage() === 'zh' ? 'zh-HK' : 'en-HK';
+                    showStatus(status, 'success', 'savedDelta', { n: delta.toLocaleString(locale) });
                     if (result.gate_status) displayGate(result.gate_status);
                 } else {
-                    status.innerHTML = `<div class="status-alert error">Error: ${result.message || 'Unknown error'}</div>`;
+                    showServerStatus(status, 'error', result.message || t('unknownError'));
                 }
             } catch (error) {
-                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+                showStatus(status, 'error', 'networkError', { message: error.message });
             }
         }
         
@@ -1219,8 +1346,9 @@
             
             // Disable button and show processing state
             button.disabled = true;
-            button.textContent = '⏳ Processing month-end...';
-            summary.textContent = 'Copying previous month\'s workbooks and updating with current data...';
+            continueState = 'processing';
+            renderContinueButton();
+            summary.textContent = t('copyingWorkbooks');
             errors.innerHTML = '';
             
             try {
@@ -1231,8 +1359,9 @@
                 const result = await response.json();
                 
                 if (response.ok && result.success) {
-                    button.textContent = '✓ Month-End Complete';
-                    summary.textContent = result.message;
+                    continueState = 'done';
+                    renderContinueButton();
+                    summary.textContent = translateServer(result.message);
                     showView('results');
                     if (result.billing_month) {
                         await refreshMonths(result.billing_month);
@@ -1244,30 +1373,35 @@
                         .join('\n');
                     
                     errors.innerHTML = `<div class="status-alert success" style="margin-top: 12px;">
-                        <strong>Updated workbooks:</strong><br>
-                        <pre style="margin-top: 8px; font-size: 11px; overflow-x: auto;">${filesList}</pre>
+                        <strong>${escapeHtml(t('updatedWorkbooks'))}</strong><br>
+                        <pre style="margin-top: 8px; font-size: 11px; overflow-x: auto;">${escapeHtml(filesList)}</pre>
                     </div>`;
                 } else {
-                    // Error response
-                    button.textContent = '❌ Month-End Failed';
+                    continueState = 'failed';
+                    renderContinueButton();
                     button.disabled = false;
                     
-                    const errorMsg = result.detail || result.message || 'Unknown error';
-                    summary.textContent = 'Month-end processing failed.';
-                    errors.innerHTML = `<div class="status-alert error">${errorMsg}</div>`;
+                    const errorMsg = serverDetail(result.detail) || result.message || t('unknownError');
+                    summary.textContent = t('monthEndFailedSummary');
+                    errors.innerHTML = `<div class="status-alert error">${escapeHtml(translateServer(errorMsg))}</div>`;
                 }
             } catch (error) {
-                // Network or other error
-                button.textContent = '▶️ Continue to Part 2';
+                continueState = 'idle';
+                renderContinueButton();
                 button.disabled = false;
                 
-                summary.textContent = 'Error processing month-end.';
-                errors.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+                summary.textContent = t('monthEndError');
+                errors.innerHTML = `<div class="status-alert error">${escapeHtml(t('networkError', { message: error.message }))}</div>`;
             }
         }
 
         let processedMonths = [];
         let itemKind = 'bill';
+
+        function serverDetail(detail) {
+            if (Array.isArray(detail)) return detail.map((item) => item.msg || item).join(' ');
+            return detail;
+        }
 
         function money(value) {
             const number = Number(value) || 0;
@@ -1299,7 +1433,7 @@
             const previous = prefer || select.value;
             select.innerHTML = processedMonths.map((item) =>
                 `<option value="${item.month}">${item.month}</option>`
-            ).join('') || '<option value="">No processed month</option>';
+            ).join('') || `<option value="">${escapeHtml(t('noProcessedMonth'))}</option>`;
             if (previous && processedMonths.some((item) => item.month === previous)) {
                 select.value = previous;
             }
@@ -1343,7 +1477,8 @@
             document.getElementById('chartKwh').innerHTML = '';
             document.getElementById('chartCost').innerHTML = '';
             document.getElementById('itemChartTitle').textContent = '';
-            document.getElementById('chartCostTitle').textContent = 'Cost';
+            document.getElementById('chartCostTitle').textContent = t('cost');
+            chartItem = null;
         }
 
         function setItemKind(kind) {
@@ -1362,16 +1497,18 @@
                 const response = await fetch(`${API_BASE}/api/history/items?kind=${encodeURIComponent(itemKind)}`);
                 const payload = await response.json();
                 if (!response.ok) {
-                    status.innerHTML = `<div class="status-alert error">${payload.detail || 'Could not load buttons'}</div>`;
+                    showServerStatus(status, 'error', serverDetail(payload.detail) || t('couldNotLoadButtons'));
                     box.innerHTML = '';
                     setHistoryDownload(false);
                     return;
                 }
                 status.innerHTML = '';
+                delete status.dataset.statusKey;
+                delete status.dataset.serverMessage;
                 setHistoryDownload(payload.history);
                 const items = payload.items || [];
                 if (!items.length) {
-                    box.innerHTML = '<p class="results-note">Nothing saved for this choice yet.</p>';
+                    box.innerHTML = `<p class="results-note">${escapeHtml(t('nothingSaved'))}</p>`;
                     return;
                 }
                 box.innerHTML = items.map((item) =>
@@ -1381,7 +1518,7 @@
                     button.addEventListener('click', () => selectItem(button.dataset.id, button));
                 });
             } catch (error) {
-                status.innerHTML = `<div class="status-alert error">Error: ${error.message}</div>`;
+                showStatus(status, 'error', 'networkError', { message: error.message });
             }
         }
 
@@ -1394,31 +1531,37 @@
             const series = await response.json();
             const status = document.getElementById('resultsStatus');
             if (!response.ok) {
-                status.innerHTML = `<div class="status-alert error">${series.detail || 'No history for that item'}</div>`;
+                showServerStatus(status, 'error', serverDetail(series.detail) || t('noHistoryItem'));
                 clearItemChart();
                 return;
             }
+            chartItem = itemId;
             status.innerHTML = '';
+            delete status.dataset.statusKey;
+            delete status.dataset.serverMessage;
             document.getElementById('chartPlaceholder').hidden = true;
             document.getElementById('itemChart').hidden = false;
             document.getElementById('itemChartTitle').textContent = series.label || itemId;
-            document.getElementById('chartCostTitle').textContent = series.cost_label || 'Cost';
-            document.getElementById('chartKwh').innerHTML = barChart(series.months, series.kwh, '#2563eb', 'kWh');
+            document.getElementById('chartCostTitle').textContent = series.kind === 'meter' ? t('proportionalCharge') : t('cost');
+            document.getElementById('chartKwh').innerHTML = barChart(series.months, series.kwh, '#2563eb', 'kwh');
             const costs = series.cost || [];
             const printed = costs.some((value) => value !== null && value !== undefined);
+            const note = series.note === 'Account kWh is zero, so the proportional charge is blank.'
+                ? t('noteZeroKwh')
+                : (series.note ? translateServer(series.note) : t('noCostStored'));
             document.getElementById('chartCost').innerHTML = printed
-                ? barChart(series.months, costs, '#0f766e', 'HKD')
-                : `<p class="results-note">${escapeHtml(series.note || 'No cost is stored for this item.')}</p>`;
+                ? barChart(series.months, costs, '#0f766e', 'hkd')
+                : `<p class="results-note">${escapeHtml(note)}</p>`;
         }
 
-        function barChart(labels, values, color, unit) {
+        function barChart(labels, values, color, format) {
             labels = labels || [];
             const numbers = (values || []).map((value) => (
                 value === null || value === undefined || value === '' ? null : Number(value)
             ));
             const present = numbers.filter((value) => value !== null && !Number.isNaN(value));
             if (!labels.length || !present.length) {
-                return '<p class="results-note">Nothing to chart for this item.</p>';
+                return `<p class="results-note">${escapeHtml(t('nothingToChart'))}</p>`;
             }
             const width = Math.max(320, labels.length * 72);
             const height = 200;
@@ -1435,7 +1578,7 @@
                 const barHeight = missing ? 0 : value * scale;
                 const x = padLeft + index * (barWidth + gap);
                 const y = height - padBottom - barHeight;
-                const shown = missing ? 'not printed' : (unit === 'HKD' ? money(value) : units(value));
+                const shown = missing ? t('notPrinted') : (format === 'hkd' ? money(value) : units(value));
                 const rect = missing ? '' : `<rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barHeight, 0)}" rx="4" fill="${color}"></rect>`;
                 return `
                     <g>
@@ -1445,7 +1588,8 @@
                     </g>
                 `;
             }).join('');
-            return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${unit} chart">${bars}</svg>`;
+            const aria = format === 'hkd' ? t('costChartAria') : t('kwhChartAria');
+            return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(aria)}">${bars}</svg>`;
         }
     </script>
 </body>

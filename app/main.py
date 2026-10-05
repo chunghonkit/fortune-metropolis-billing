@@ -93,6 +93,12 @@ async def root():
     return FileResponse("static/index.html")
 
 
+@app.get("/i18n.js")
+async def i18n_script():
+    """English and Traditional Chinese strings for the dashboard."""
+    return FileResponse("static/i18n.js", media_type="text/javascript")
+
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
